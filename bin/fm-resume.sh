@@ -19,6 +19,12 @@
 #   fm-resume.sh            ensure the session once, then exit
 #   fm-resume.sh --watch    ensure forever, re-checking every FM_RESUME_INTERVAL
 #                           seconds (the long-running ExecStart for the service)
+#
+# Useful overrides:
+#   FM_SESSION names the persistent tmux session (default: firstmate).
+#   FM_FIRSTMATE_HARNESS / FM_FIRSTMATE_COMMAND choose the launch command.
+#   FM_CLAUDE_BIN, FM_CODEX_BIN, FM_OPENCODE_BIN, or FM_PI_BIN pin a binary.
+#   FM_CONFIG_DIR sets CLAUDE_CONFIG_DIR for Claude launches.
 set -eu
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

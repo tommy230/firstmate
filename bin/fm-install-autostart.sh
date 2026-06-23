@@ -11,6 +11,12 @@
 #   fm-install-autostart.sh status     show unit + session state
 #   fm-install-autostart.sh uninstall  stop, disable, and remove the unit
 #
+# Useful overrides:
+#   FM_FIRSTMATE_HARNESS / FM_FIRSTMATE_COMMAND choose the launch command.
+#   FM_CLAUDE_BIN, FM_CODEX_BIN, FM_OPENCODE_BIN, or FM_PI_BIN pin a binary.
+#   FM_AUTOSTART_USER / FM_AUTOSTART_HOME choose the systemd User and HOME.
+#   FM_UNIT_DST changes the rendered unit destination, mostly for tests.
+#
 # Reversible: `uninstall` leaves no trace and never touches a running firstmate
 # session (KillMode=process in the unit), so removing autostart cannot discard work.
 set -eu

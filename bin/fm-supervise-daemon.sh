@@ -48,9 +48,9 @@
 #     have missed (e.g. a status verb outside CAPTAIN_RE) and escalates it.
 #
 # The robustness shell from the prior always-inject version is preserved:
-# single-instance lock (portable mkdir-based, no flock dependency), crash-loop
-# backoff, pane-gone guard, and a signal-trapped shutdown that flushes buffered
-# escalations before exit.
+# single-instance lock (portable O_EXCL file lock, no flock dependency),
+# crash-loop backoff, pane-gone guard, and a signal-trapped shutdown that
+# flushes buffered escalations before exit.
 #
 # Usage: fm-supervise-daemon.sh
 #          Long-lived background loop. Normally started by the /afk skill, which
@@ -91,10 +91,11 @@
 #          FM_LOG_MAX_BYTES / FM_LOG_KEEP_LINES / FM_CRASH_*  log + crash guards
 #          FM_STATE_OVERRIDE        alternate state dir (testing)
 #          Logs each wake to state/.supervise-daemon.log (size-capped). Single
-#          instance via portable mkdir lock on state/.supervise-daemon.lock. Trapped
-#          SIGTERM/SIGINT shut down within ~1s, flush escalations, release the
-#          lock. A crashing fm-watch.sh is logged and restarted, never killing
-#          the daemon; a tight crash-restart spin is detected and backed off.
+#          instance via portable O_EXCL lock on state/.supervise-daemon.lock.
+#          Trapped SIGTERM/SIGINT shut down within ~1s, flush escalations,
+#          release the lock. A crashing fm-watch.sh is logged and restarted,
+#          never killing the daemon; a tight crash-restart spin is detected and
+#          backed off.
 set -u
 
 FM_DAEMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -709,7 +710,7 @@ fm_super_main() {
   STATE="$(_state_root)"
   mkdir -p "$STATE"
 
-  # Source the portable lock helpers (mkdir-based, works on macOS where flock
+  # Source the portable lock helpers (O_EXCL-based, works on macOS where flock
   # is absent). Export FM_STATE_OVERRIDE so the lib resolves the same state dir.
   # shellcheck source=bin/fm-wake-lib.sh
   FM_STATE_OVERRIDE="$STATE" . "$FM_DAEMON_DIR/fm-wake-lib.sh"
@@ -727,7 +728,7 @@ fm_super_main() {
 
   [ -x "$WATCH" ] || { echo "error: watcher not found or not executable: $WATCH" >&2; exit 1; }
 
-  # --- single instance (portable mkdir-based lock, no flock dependency) ------
+  # --- single instance (portable O_EXCL lock, no flock dependency) -----------
   if ! fm_lock_try_acquire "$LOCK"; then
     if [ -n "${FM_LOCK_HELD_PID:-}" ]; then
       echo "error: another fm-supervise-daemon is already running (pid $FM_LOCK_HELD_PID, lock $LOCK held)" >&2

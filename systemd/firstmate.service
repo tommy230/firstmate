@@ -1,8 +1,8 @@
 [Unit]
 Description=Firstmate persistent supervisor session (crash/reboot resilience)
 Documentation=https://github.com/kunchenguid/firstmate
-# Wait for the Windows drive mounts; the orchestrator account config lives under
-# /mnt/c. Non-fatal if the mount unit name differs - the resume script retries.
+# Wait for local filesystems that may contain the checkout or harness config.
+# Non-fatal if a needed mount is late - the resume watchdog retries.
 After=local-fs.target
 
 [Service]

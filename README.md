@@ -212,9 +212,15 @@ FM_LOCK_STALE_AFTER=10  # seconds before a fresh empty lock file may be reclaime
 FM_SESSION=firstmate    # persistent supervisor tmux session name
 FM_FIRSTMATE_HARNESS=   # optional explicit harness: claude, codex, opencode, or pi
 FM_FIRSTMATE_COMMAND=   # optional full launch command rendered into systemd autostart
-FM_CLAUDE_BIN=          # optional Claude binary path for fm-resume.sh
+FM_CLAUDE_BIN=          # optional Claude binary path for fm-resume.sh / autostart rendering
+FM_CODEX_BIN=           # optional Codex binary path for fm-resume.sh / autostart rendering
+FM_OPENCODE_BIN=        # optional opencode binary path for fm-resume.sh / autostart rendering
+FM_PI_BIN=              # optional pi binary path for fm-resume.sh / autostart rendering
 FM_CONFIG_DIR=          # optional Claude config dir for fm-resume.sh
 FM_RESUME_INTERVAL=60   # seconds between watchdog checks in fm-resume.sh --watch
+FM_AUTOSTART_USER=      # optional systemd User= override for fm-install-autostart.sh
+FM_AUTOSTART_HOME=      # optional HOME= override for the rendered systemd unit
+FM_UNIT_DST=/etc/systemd/system/firstmate.service  # optional unit destination, mainly for tests
 # sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk
 FM_SUPERVISOR_TARGET=firstmate:0   # supervisor tmux target (override; auto-discovers from $TMUX_PANE)
 FM_INJECT_SKIP=heartbeat           # |-prefixes force-self-handled bypassing classification; empty disables
@@ -248,7 +254,7 @@ tests/fm-wake-queue.test.sh               # durable wake queue, singleton behavi
 tests/fm-afk-inject-e2e.test.sh           # private-socket end-to-end test of the afk injection path (partial-input deferral, swallowed-Enter retry)
 tests/fm-bootstrap.test.sh                # bootstrap dependency and feature-probe tests
 tests/fm-secondmate.test.sh               # persistent secondmate routing, seeding, idle charter, backlog handoff, spawn, recovery, teardown, and FM_HOME tests
-tests/fm-teardown.test.sh                 # fm-teardown.sh unpushed-work safety check: local-only fork-remote allow, truly-unpushed refuse, merged-to-main allow, no-mistakes regression, --force override
+tests/fm-teardown.test.sh                 # fm-teardown.sh unpushed-work safety check, generated-hook cleanup, and --force override
 [ "$(readlink CLAUDE.md)" = "AGENTS.md" ]
 [ "$(readlink .claude/skills)" = "../.agents/skills" ]
 FM_HEARTBEAT=2 FM_POLL=1 bin/fm-watch.sh  # watcher smoke test (prints "heartbeat")

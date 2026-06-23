@@ -582,7 +582,7 @@ This is why fewer, cheaper firstmate turns handle the same fleet.
   That empty composer is the acknowledgement that the submit landed, using the same border-aware detector so a bordered-empty claude composer counts as submitted rather than a false "swallowed Enter".
   `fm-send.sh` shares this primitive and exits non-zero on a positively-confirmed swallow, so firstmate learns a steer did not land instead of leaving it unsubmitted.
 - **Marker strip** - `strip_injection_marker` removes the sentinel prefix before classification/relay, so the digest text firstmate sees is clean.
-- **Portable singleton lock** - the daemon uses the repo's mkdir-based lock helper (`fm-wake-lib.sh`) instead of `flock`, which is absent on macOS.
+- **Portable singleton lock** - the daemon uses the repo's O_EXCL file-lock helper (`fm-wake-lib.sh`) instead of `flock`, which is absent on macOS.
 - **Dedupe across signal/stale/scan** - `classify_signal` and `classify_stale` both check the seen-status marker before escalating, so a status escalated by one path is not re-escalated by another in the same digest.
 - **Auto-discovered supervisor pane** - the daemon resolves its injection target from `FM_SUPERVISOR_TARGET`, then `$TMUX_PANE` (inherited from the pane that launched it), then a `firstmate:0` fallback with a warning; the resolution source is logged at startup so a wrong-but-resolving fallback is detectable.
 
