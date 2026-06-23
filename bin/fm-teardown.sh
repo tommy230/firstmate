@@ -69,6 +69,23 @@ meta_value() {
   grep "^$key=" "$meta" | cut -d= -f2- || true
 }
 
+sanitize_state_name() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'; }
+
+cleanup_task_state() {
+  local state=$1 id=$2 check_name sidecar_name
+  check_name=$(sanitize_state_name "$id.check.sh")
+  sidecar_name=$(sanitize_state_name ".babysit-$id.seen")
+  rm -f \
+    "$state/$id.status" \
+    "$state/$id.turn-ended" \
+    "$state/$id.check.sh" \
+    "$state/$id.meta" \
+    "$state/$id.pi-ext.ts" \
+    "$state/.seen-check-$check_name" \
+    "$state/.babysit-$id.seen" \
+    "$state/.escalated-$sidecar_name"
+}
+
 registry_home_for_line() {
   sed -n 's/^[^(]*(home: \([^;)]*\);.*/\1/p'
 }
@@ -346,7 +363,7 @@ cleanup_firstmate_home_children() {
         safe_rm_rf_child_worktree "$child_wt" "$child_proj"
       fi
     fi
-    rm -f "$sub_state/$child_id.status" "$sub_state/$child_id.turn-ended" "$sub_state/$child_id.check.sh" "$sub_state/$child_id.meta" "$sub_state/$child_id.pi-ext.ts"
+    cleanup_task_state "$sub_state" "$child_id"
   done
 }
 
@@ -446,7 +463,7 @@ if [ "$KIND" = secondmate ]; then
   remove_firstmate_home "$HOME_PATH" "secondmate home" "$ID"
   remove_secondmate_registry_entry "$ID"
 fi
-rm -f "$STATE/$ID.status" "$STATE/$ID.turn-ended" "$STATE/$ID.check.sh" "$STATE/$ID.meta" "$STATE/$ID.pi-ext.ts"
+cleanup_task_state "$STATE" "$ID"
 if [ "$KIND" != scout ] && [ "$KIND" != secondmate ] && [ "$MODE" != local-only ]; then
   "$FM_ROOT/bin/fm-fleet-sync.sh" "$PROJ" || true
 fi
