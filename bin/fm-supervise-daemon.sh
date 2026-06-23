@@ -35,11 +35,12 @@
 #     touch the queue; it only reads the watcher's stdout reason.
 #   - Fail-safe-to-escalate: any wake the classifier cannot confidently mark
 #     routine is escalated.
-#   - Bounded wedge latency: a stale pane is escalated only after it has been
-#     idle for STALE_ESCALATE_SECS (configurable), rechecked once. A wedged
-#     crewmate is therefore detected within STALE_ESCALATE_SECS + a tick, never
-#     lost. Crewmates are autonomous, so a delayed stale response does not stall
-#     a healthy crewmate's own progress.
+#   - Bounded wedge latency: only crewmate panes (fm-* windows) are stale-wedge
+#     subjects. A stale crewmate pane is escalated only after it has been idle
+#     for STALE_ESCALATE_SECS (configurable), rechecked once. A wedged crewmate
+#     is therefore detected within STALE_ESCALATE_SECS + a tick, never lost.
+#     The supervisor's own idle pane is ignored, and crewmates are autonomous,
+#     so a delayed stale response does not stall healthy crewmate progress.
 #   - Cheap heartbeat catch-all: every HEARTBEAT_SCAN_SECS the daemon greps all
 #     state/*.status for a captain-relevant line the per-wake classifier might
 #     have missed (e.g. a status verb outside CAPTAIN_RE) and escalates it.

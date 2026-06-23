@@ -79,8 +79,10 @@ The daemon never injects into an in-use pane. Two checks run before every
 injection:
 
 - **`pane_is_busy`** — the harness shows a busy footer (agent mid-turn).
-- **`pane_input_pending`** — the cursor line has non-empty content (a human's
-  half-typed line, or a previous injection whose Enter was swallowed).
+- **`pane_input_pending`** — the cursor line has content that is not a known
+  empty composer (a human's half-typed line, or a previous injection whose
+  Enter was swallowed). Known empty composers include bare prompts and
+  opencode's bordered `Ask anything...` placeholder.
 
 Either condition defers the injection; the buffered escalation survives in
 `state/.subsuper-escalations` and is retried on the next housekeeping tick. In
