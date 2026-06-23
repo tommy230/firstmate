@@ -80,7 +80,7 @@ fm_path_age() {
 # an atomic hardlink if a live holder had reappeared in the gap.
 
 fm_lock_try_acquire() {
-  local lockfile=$1 pid me steal spid
+  local lockfile=$1 pid me steal spid pid_steal
   FM_LOCK_HELD_PID=
   # Compute the pid in THIS shell, not inside the O_EXCL subshell below (where
   # BASHPID would be the subshell's). Expanded before the subshell forks, so the
@@ -99,7 +99,11 @@ fm_lock_try_acquire() {
       FM_LOCK_HELD_PID=$pid
       return 1
     fi
-    rm -rf "$lockfile" 2>/dev/null || true
+    pid_steal="$lockfile.pid.stale.$me"
+    rm -f "$pid_steal" 2>/dev/null || true
+    mv "$lockfile/pid" "$pid_steal" 2>/dev/null || true
+    rmdir "$lockfile" 2>/dev/null || true
+    rm -f "$pid_steal" 2>/dev/null || true
   elif [ -e "$lockfile" ]; then
     pid=$(cat "$lockfile" 2>/dev/null || true)
     if fm_pid_alive "$pid"; then
@@ -148,14 +152,18 @@ fm_lock_acquire_wait() {
 }
 
 fm_lock_release() {
-  local lockfile=$1 pid current
+  local lockfile=$1 pid current pid_steal
   fm_assign_current_pid current
   # Remove only our own lock. A directory is the legacy format; treat its pid
   # file the same way so an in-flight upgrade releases cleanly.
   if [ -d "$lockfile" ]; then
     pid=$(cat "$lockfile/pid" 2>/dev/null || true)
     [ "$pid" = "$current" ] || return 0
-    rm -rf "$lockfile" 2>/dev/null || true
+    pid_steal="$lockfile.pid.release.$current"
+    rm -f "$pid_steal" 2>/dev/null || true
+    mv "$lockfile/pid" "$pid_steal" 2>/dev/null || true
+    rmdir "$lockfile" 2>/dev/null || true
+    rm -f "$pid_steal" 2>/dev/null || true
     return 0
   fi
   pid=$(cat "$lockfile" 2>/dev/null || true)
