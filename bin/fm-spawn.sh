@@ -193,6 +193,27 @@ path_is_ancestor_of() {
   return 1
 }
 
+git_worktree_for_project() {
+  local project=$1 candidate=$2 abs_project abs_candidate listed line listed_path
+  [ -d "$candidate" ] || return 1
+  abs_project=$(cd "$project" && pwd -P) || return 1
+  abs_candidate=$(cd "$candidate" && pwd -P) || return 1
+  [ "$abs_candidate" != "$abs_project" ] || return 1
+  listed=$(git -C "$project" -c core.quotePath=false worktree list --porcelain 2>/dev/null) || return 1
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *)
+        listed_path=${line#worktree }
+        [ -d "$listed_path" ] || continue
+        [ "$(cd "$listed_path" && pwd -P)" = "$abs_candidate" ] && return 0
+        ;;
+    esac
+  done <<EOF
+$listed
+EOF
+  return 1
+}
+
 validate_firstmate_home_for_spawn() {
   local id=$1 home=$2 abs_home abs_active_home abs_root marker_id
   abs_home=$(resolved_existing_dir "$home") || return 1
@@ -326,12 +347,10 @@ if [ "$KIND" != secondmate ]; then
   WT=""
   for _ in $(seq 1 60); do
     p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
-    # Wait specifically for a treehouse worktree (under {root}/.treehouse/), not just any
-    # cwd change: a freshly-created window can transiently report the session's default cwd
-    # before `treehouse get` lands, which would otherwise be misrecorded as the worktree.
-    case "$p" in
-      */.treehouse/*) WT="$p"; break ;;
-    esac
+    if git_worktree_for_project "$PROJ_ABS" "$p"; then
+      WT="$p"
+      break
+    fi
     sleep 1
   done
   if [ -z "$WT" ]; then
