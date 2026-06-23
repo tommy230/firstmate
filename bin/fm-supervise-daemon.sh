@@ -117,10 +117,11 @@ CAPTAIN_RE_DEFAULT='done:|needs-decision:|blocked:|failed:|PR ready|checks green
 # REPLACED by their text, so the cursor line becomes "<indent>┃  <typed text>".
 # The empty-composer signal is therefore: cursor line starts with a box-drawing
 # vertical border followed by either only whitespace (border-only chrome) or the
-# "Ask anything..." placeholder. A typed line ("┃  hello") matches neither, so it
-# is still correctly treated as pending input. Requires a UTF-8 locale (C.UTF-8),
-# the same assumption the existing ❯ alternative already makes.
-COMPOSER_IDLE_RE_DEFAULT='^[[:space:]]*(\$|>|❯|%|#)[[:space:]]*$|esc (to )?interrupt|Working\.\.\.|^[[:space:]]*[┃│][[:space:]]*$|^[[:space:]]*[┃│][[:space:]]*Ask anything\.\.\.'
+# exact "Ask anything..." placeholder, optionally followed by opencode's quoted
+# suggestion. A typed line ("┃  hello") matches neither, so it is still correctly
+# treated as pending input. Requires a UTF-8 locale (C.UTF-8), the same assumption
+# the existing ❯ alternative already makes.
+COMPOSER_IDLE_RE_DEFAULT='^[[:space:]]*(\$|>|❯|%|#)[[:space:]]*$|esc (to )?interrupt|Working\.\.\.|^[[:space:]]*[┃│][[:space:]]*$|^[[:space:]]*[┃│][[:space:]]*Ask anything\.\.\.([[:space:]]+"[^"]*")?[[:space:]]*$'
 INJECT_FAIL_SLEEP_DEFAULT=30
 INJECT_CONFIRM_RETRIES_DEFAULT=3
 INJECT_CONFIRM_SLEEP_DEFAULT=0.5

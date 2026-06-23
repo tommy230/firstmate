@@ -79,6 +79,7 @@ OPENCODE_IDLE_NO_SUGG='                       ┃  Ask anything...'
 OPENCODE_BORDER_ONLY='                       ┃'
 OPENCODE_TYPED_LINE='                       ┃  hello captain'
 OPENCODE_TYPED_ASK='                       ┃  Ask anything else I need help with'
+OPENCODE_TYPED_PLACEHOLDER_PREFIX='                       ┃  Ask anything... please continue'
 
 # ============================================================================
 # Bug 1: opencode-aware composer-idle detection (pane_input_pending)
@@ -145,6 +146,18 @@ test_opencode_typed_ask_anything_is_pending() {
     pane_input_pending "fakepane" \
     || fail "typed 'Ask anything ...' text NOT detected as pending (loose match?)"
   pass "opencode: typed text resembling the placeholder still IS pending"
+}
+
+test_opencode_typed_placeholder_prefix_is_pending() {
+  local dir fakebin capture
+  dir=$(make_fake_tmux oc-typed-placeholder-prefix)
+  fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"
+  printf '%s\n' "$OPENCODE_TYPED_PLACEHOLDER_PREFIX" > "$capture"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_CAPTURE="$capture" FM_FAKE_TMUX_CURSOR_Y=0 \
+    pane_input_pending "fakepane" \
+    || fail "typed text beginning with placeholder prefix NOT detected as pending"
+  pass "opencode: typed text beginning with placeholder prefix IS pending"
 }
 
 test_legacy_bare_prompts_still_not_pending() {
@@ -280,6 +293,7 @@ test_opencode_idle_no_suggestion_not_pending
 test_opencode_border_only_not_pending
 test_opencode_typed_text_is_pending
 test_opencode_typed_ask_anything_is_pending
+test_opencode_typed_placeholder_prefix_is_pending
 test_legacy_bare_prompts_still_not_pending
 # Bug 2
 test_is_crewmate_window_classifies
