@@ -112,9 +112,9 @@ launch_template() {
     claude) printf '%s' 'claude --dangerously-skip-permissions "$(cat __BRIEF__)"' ;;
     codex)
       if [ "$kind" = secondmate ]; then
-        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox "$(cat __BRIEF__)"'
+        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox -c mcp_servers.agent-native-web-production-e480f.enabled=false -c mcp_servers.agent-native-dispatch.enabled=false "$(cat __BRIEF__)"'
       else
-        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(cat __BRIEF__)"'
+        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox -c mcp_servers.agent-native-web-production-e480f.enabled=false -c mcp_servers.agent-native-dispatch.enabled=false -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(cat __BRIEF__)"'
       fi
       ;;
     opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}}'\'' opencode --prompt "$(cat __BRIEF__)"' ;;

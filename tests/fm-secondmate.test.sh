@@ -1083,6 +1083,10 @@ test_secondmate_spawn_records_home_meta() {
   grep -F 'FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$log" >/dev/null || fail "secondmate launch did not clear operational overrides"
   grep -F 'FM_CONFIG_OVERRIDE=' "$log" >/dev/null || fail "secondmate launch did not clear config override"
   grep -F "$subhome_abs/data/charter.md" "$log" >/dev/null || fail "secondmate launch did not use persistent charter"
+  grep -F -- '-c mcp_servers.agent-native-web-production-e480f.enabled=false' "$log" >/dev/null \
+    || fail "secondmate codex launch did not disable agent-native-web-production MCP"
+  grep -F -- '-c mcp_servers.agent-native-dispatch.enabled=false' "$log" >/dev/null \
+    || fail "secondmate codex launch did not disable agent-native-dispatch MCP"
   grep -F "$home/data/spawn-sub/brief.md" "$log" >/dev/null && fail "secondmate launch used stale parent brief"
   grep -F 'notify=' "$log" >/dev/null && fail "secondmate codex launch should not install parent turn-end notify"
   grep -F 'turn-ended' "$log" >/dev/null && fail "secondmate launch should not reference parent turn-end marker"
