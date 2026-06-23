@@ -240,9 +240,55 @@ test_local_only_force_overrides_unpushed() {
   pass "local-only worktree with unpushed work is torn down under --force (escape hatch)"
 }
 
+test_untracked_generated_hooks_do_not_block_teardown() {
+  local case_dir rc
+  case_dir=$(make_case generated-hooks)
+  write_meta "$case_dir" no-mistakes ship
+  wt_commit "$case_dir" "shippable work"
+  git -C "$case_dir/wt" push -q origin fm/task-x1
+  git -C "$case_dir/project" fetch -q origin
+  mkdir -p "$case_dir/wt/.claude" "$case_dir/wt/.opencode/plugins"
+  printf '{}\n' > "$case_dir/wt/.claude/settings.local.json"
+  printf 'export {}\n' > "$case_dir/wt/.opencode/plugins/fm-turn-end.js"
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "generated-hooks: teardown should ignore exact untracked hook files"
+  ! grep -q REFUSED "$case_dir/stderr" || fail "generated-hooks: teardown printed a REFUSED line"
+  pass "untracked generated hook files do not block teardown"
+}
+
+test_tracked_claude_settings_change_refuses() {
+  local case_dir rc
+  case_dir=$(make_case tracked-claude-settings)
+  write_meta "$case_dir" no-mistakes ship
+  mkdir -p "$case_dir/wt/.claude"
+  printf '{"tracked":true}\n' > "$case_dir/wt/.claude/settings.local.json"
+  git -C "$case_dir/wt" add -f .claude/settings.local.json
+  git -C "$case_dir/wt" -c user.email=t@t -c user.name=t \
+    commit -q -m "track claude settings"
+  git -C "$case_dir/wt" push -q origin fm/task-x1
+  git -C "$case_dir/project" fetch -q origin
+  printf '{"tracked":false}\n' > "$case_dir/wt/.claude/settings.local.json"
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "tracked-claude-settings: teardown should refuse tracked settings changes"
+  grep -q REFUSED "$case_dir/stderr" || fail "tracked-claude-settings: no REFUSED line in stderr"
+  pass "tracked .claude/settings.local.json changes block teardown"
+}
+
 test_local_only_fork_remote_allows
 test_local_only_truly_unpushed_refuses
 test_local_only_merged_to_local_main_allows
 test_no_mistakes_origin_remote_allows
 test_no_mistakes_truly_unpushed_refuses
 test_local_only_force_overrides_unpushed
+test_untracked_generated_hooks_do_not_block_teardown
+test_tracked_claude_settings_change_refuses

@@ -394,8 +394,7 @@ if [ -d "$WT" ] && [ "$FORCE" != "--force" ]; then
       exit 1
     fi
   else
-    # The fm-spawn hook file is ours, never work product; ignore it in the dirty check.
-    dirty=$(git -C "$WT" status --porcelain 2>/dev/null | grep -vE '\.claude/settings\.local\.json|^\?\? \.claude/' | head -1 || true)
+    dirty=$(git -C "$WT" status --porcelain -uall 2>/dev/null | grep -vE '^\?\? \.claude/settings\.local\.json$|^\?\? \.opencode/plugins/fm-turn-end\.js$' | head -1 || true)
     # A worktree's work is "safely on a remote" once HEAD is reachable from ANY
     # remote-tracking branch (empty result here). A fork is a remote too, so
     # upstream-contribution PRs pushed to a fork satisfy this regardless of mode.

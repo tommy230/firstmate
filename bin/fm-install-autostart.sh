@@ -83,13 +83,47 @@ firstmate_command() {
   esac
 }
 
+autostart_user() {
+  if [ -n "${FM_AUTOSTART_USER:-}" ]; then
+    printf '%s\n' "$FM_AUTOSTART_USER"
+  elif [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    printf '%s\n' "$SUDO_USER"
+  else
+    id -un
+  fi
+}
+
+autostart_home() {
+  local user=$1 home
+  if [ -n "${FM_AUTOSTART_HOME:-}" ]; then
+    printf '%s\n' "$FM_AUTOSTART_HOME"
+    return 0
+  fi
+  home=$(getent passwd "$user" 2>/dev/null | cut -d: -f6 || true)
+  if [ -n "$home" ]; then
+    printf '%s\n' "$home"
+    return 0
+  fi
+  if [ "$user" = "$(id -un)" ]; then
+    printf '%s\n' "$HOME"
+    return 0
+  fi
+  echo "error: cannot determine home for autostart user '$user'; set FM_AUTOSTART_HOME" >&2
+  return 1
+}
+
 render_unit() {
-  local root command line
+  local root command raw_user user home line
   root=$(systemd_quote "$FM_ROOT")
   command=$(systemd_quote "$(firstmate_command)")
+  raw_user=$(autostart_user)
+  user=$(systemd_quote "$raw_user")
+  home=$(systemd_quote "$(autostart_home "$raw_user")")
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line//@FM_ROOT@/$root}
-    printf '%s\n' "${line//@FM_FIRSTMATE_COMMAND@/$command}"
+    line=${line//@FM_FIRSTMATE_COMMAND@/$command}
+    line=${line//@FM_USER@/$user}
+    printf '%s\n' "${line//@FM_HOME@/$home}"
   done < "$UNIT_SRC"
 }
 
