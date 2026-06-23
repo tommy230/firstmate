@@ -78,6 +78,13 @@ broken_status=$?
 [ ! -f "$BROKEN_UNIT_DST" ] || fail "unit was written after launch command inference failed"
 printf '%s\n' "$broken_out" | grep -qF "cannot infer firstmate launch command" || fail "missing inference failure: $broken_out"
 
+MISSING_BIN_UNIT_DST="$TMP/missing-bin-firstmate.service"
+missing_bin_out=$(PATH="$TMP/bin:/usr/bin:/bin" FM_UNIT_DST="$MISSING_BIN_UNIT_DST" FM_FIRSTMATE_HARNESS=codex FM_AUTOSTART_USER=tester FM_AUTOSTART_HOME="$TMP/home/tester" bash "$INSTALLER" install 2>&1)
+missing_bin_status=$?
+[ "$missing_bin_status" -ne 0 ] || fail "install succeeded with missing harness binary"
+[ ! -f "$MISSING_BIN_UNIT_DST" ] || fail "unit was written after harness binary lookup failed"
+! printf '%s\n' "$missing_bin_out" | grep -qF "FM_FIRSTMATE_COMMAND=exec  --dangerously-bypass-approvals-and-sandbox" || fail "missing binary rendered an empty command: $missing_bin_out"
+
 PRIVILEGED_UNIT_DST="$TMP/privileged-firstmate.service"
 SUDO_LOG="$TMP/sudo.log"
 cat > "$TMP/bin/sudo" <<SH

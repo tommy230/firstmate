@@ -80,3 +80,15 @@ if "$REAL_TMUX" -L "$SOCK" has-session -t fmfail 2>/dev/null; then
 fi
 grep -qF "cannot infer firstmate launch command" "$TMP/watch-fail.out" || fail "watch mode did not report launch command failure"
 pass "fm-resume --watch does not create an empty session after launch inference failure"
+
+# 4) a supported harness with no binary must fail before creating a session.
+FM_SESSION=fmmissing FM_FIRSTMATE_HARNESS=codex FM_RESUME_INTERVAL=1 PATH="$TMP/bin:/usr/bin:/bin" "$RESUME" --watch > "$TMP/watch-missing-bin.out" 2>&1 &
+missing_pid=$!
+sleep 0.5
+kill "$missing_pid" 2>/dev/null || true
+wait "$missing_pid" 2>/dev/null || true
+if "$REAL_TMUX" -L "$SOCK" has-session -t fmmissing 2>/dev/null; then
+  fail "watch mode created an empty session after harness binary lookup failed"
+fi
+! grep -qF "exec  --dangerously-bypass-approvals-and-sandbox" "$TMP/watch-missing-bin.out" || fail "missing binary produced an empty launch command"
+pass "fm-resume --watch does not create an empty session after harness binary lookup failure"

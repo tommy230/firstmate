@@ -57,7 +57,7 @@ firstmate_command() {
   fi
   case "$harness" in
     claude)
-      bin=$(firstmate_bin claude)
+      bin=$(firstmate_bin claude) || return 1
       config="${FM_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-}}"
       if [ -n "$config" ]; then
         printf 'CLAUDE_CONFIG_DIR=%s IS_SANDBOX=1 exec %s --dangerously-skip-permissions\n' "$(shell_quote "$config")" "$(shell_quote "$bin")"
@@ -66,15 +66,15 @@ firstmate_command() {
       fi
       ;;
     codex)
-      bin=$(firstmate_bin codex)
+      bin=$(firstmate_bin codex) || return 1
       printf 'exec %s --dangerously-bypass-approvals-and-sandbox\n' "$(shell_quote "$bin")"
       ;;
     opencode)
-      bin=$(firstmate_bin opencode)
+      bin=$(firstmate_bin opencode) || return 1
       printf 'OPENCODE_CONFIG_CONTENT=%s exec %s\n' "$(shell_quote '{"permission":{"*":"allow"}}')" "$(shell_quote "$bin")"
       ;;
     pi)
-      bin=$(firstmate_bin pi)
+      bin=$(firstmate_bin pi) || return 1
       printf 'exec %s\n' "$(shell_quote "$bin")"
       ;;
     *)
