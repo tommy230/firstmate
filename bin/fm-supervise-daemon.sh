@@ -61,8 +61,8 @@
 #                                   disables. Use sparingly: it overrides the
 #                                   captain-relevant escalation for matching
 #                                   kinds.
-#          FM_STALE_ESCALATE_SECS   idle seconds before a stale pane escalates
-#                                   as a possible wedge (default 240)
+#          FM_STALE_ESCALATE_SECS   idle seconds before a stale crewmate pane
+#                                   escalates as a possible wedge (default 240)
 #          FM_ESCALATE_BATCH_SECS   buffer window for batched escalation
 #                                   digests; 0 = flush immediately (default 90)
 #          FM_HEARTBEAT_SCAN_SECS   cadence for the catch-all status scan
@@ -72,8 +72,8 @@
 #          FM_BUSY_REGEX            OR-ed busy signatures (mirrors fm-watch.sh)
 #          FM_COMPOSER_IDLE_RE       regex matching an empty composer (idle
 #                                   prompt); non-match on the cursor line means
-#                                   pending input (default: bare prompts + busy
-#                                   footers)
+#                                   pending input (default: bare prompts, busy
+#                                   footers, opencode idle composers)
 #          FM_INJECT_CONFIRM_RETRIES Enter-retry attempts on a swallowed Enter
 #                                   (default 3); the digest is typed once, only
 #                                   Enter is retried
@@ -441,7 +441,7 @@ pane_is_busy() {  # <window>
 
 # pane_input_pending: detect non-empty text on the cursor/input line. Returns 0
 # (pending) if the cursor line has non-whitespace content that is NOT a
-# recognized idle pattern (bare prompt, busy footer).
+# recognized idle pattern (bare prompt, busy footer, or opencode idle composer).
 # This catches:
 #   - A human's half-typed line (no Enter submitted yet) — the race window
 #     between the captain returning and their message landing.
@@ -461,7 +461,8 @@ pane_input_pending() {  # <target>
   line="${line%"${line##*[![:space:]]}"}"
   # Blank line = empty composer = not pending.
   [ -n "$line" ] || return 1
-  # A recognized idle pattern (bare prompt, busy footer) = empty composer.
+  # A recognized idle pattern (bare prompt, busy footer, or opencode idle
+  # composer) = empty composer.
   printf '%s' "$line" | grep -qiE "${FM_COMPOSER_IDLE_RE:-$COMPOSER_IDLE_RE_DEFAULT}" && return 1
   return 0
 }
@@ -586,9 +587,10 @@ window_for_task() {  # <task-key>
 #   - SUBMIT ACK = the composer is empty after Enter. pane_input_pending checks
 #     the cursor line: empty means the text was consumed (submit succeeded);
 #     non-empty means Enter was swallowed (retry Enter only, not retype).
-#   - COMPOSER GUARD before typing: if the cursor line already has content (a
-#     human's half-typed line, or a previous injection's unsent text), defer
-#     entirely — injecting would merge with the human's text.
+#   - COMPOSER GUARD before typing: if the cursor line has content that is not
+#     a known empty composer (a human's half-typed line, or a previous
+#     injection's unsent text), defer entirely — injecting would merge with the
+#     human's text.
 inject_msg() {  # <message> [state]
   local msg=$1 state target i retries sleep_s
   state="${2:-$(_state_root)}"
@@ -606,8 +608,9 @@ inject_msg() {  # <message> [state]
   tmux display-message -p -t "$target" '#{pane_id}' >/dev/null 2>&1 || return 1
   # (3) Busy-guard: never inject into an in-use pane. Two checks:
   #   a) pane_is_busy: the harness shows a busy footer (agent mid-turn).
-  #   b) pane_input_pending: the cursor line has non-empty content (a human's
-  #      half-typed line, or a previous injection whose Enter was swallowed).
+  #   b) pane_input_pending: the cursor line has content that is not a known
+  #      empty composer (a human's half-typed line, or a previous injection
+  #      whose Enter was swallowed).
   # Both defer; the buffered escalation survives for the next cycle.
   if pane_is_busy "$target"; then
     log "inject deferred: supervisor pane busy (agent mid-turn)"

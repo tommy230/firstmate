@@ -201,6 +201,7 @@ FM_FLEET_PRUNE=1        # set to 0 to skip pruning local branches whose upstream
 FM_BUSY_REGEX='esc (to )?interrupt|Working\.\.\.'   # busy-pane signatures, extend per harness
 # sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk
 FM_SUPERVISOR_TARGET=firstmate:0   # supervisor tmux target (override; auto-discovers from $TMUX_PANE)
+# empty-composer regex: bare prompts, busy footers, and opencode's bordered placeholder
 FM_COMPOSER_IDLE_RE='^[[:space:]]*(\$|>|❯|%|#)[[:space:]]*$|esc (to )?interrupt|Working\.\.\.|^[[:space:]]*[┃│][[:space:]]*$|^[[:space:]]*[┃│][[:space:]]*Ask anything\.\.\.([[:space:]]+"[^"]*")?[[:space:]]*$'
 FM_INJECT_SKIP=heartbeat           # |-prefixes force-self-handled bypassing classification; empty disables
 FM_STALE_ESCALATE_SECS=240         # idle seconds before a stale crewmate pane escalates as a possible wedge
