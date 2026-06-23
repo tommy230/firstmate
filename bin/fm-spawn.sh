@@ -323,12 +323,15 @@ if [ "$KIND" != secondmate ]; then
   tmux send-keys -t "$T" 'treehouse get' Enter
 
   # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
+  WT=""
   for _ in $(seq 1 60); do
     p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
-    if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
-      WT="$p"
-      break
-    fi
+    # Wait specifically for a treehouse worktree (under {root}/.treehouse/), not just any
+    # cwd change: a freshly-created window can transiently report the session's default cwd
+    # before `treehouse get` lands, which would otherwise be misrecorded as the worktree.
+    case "$p" in
+      */.treehouse/*) WT="$p"; break ;;
+    esac
     sleep 1
   done
   if [ -z "$WT" ]; then
