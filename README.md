@@ -137,8 +137,9 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
 - **Project memory belongs to projects** - durable project-intrinsic agent knowledge lives in each project's committed `AGENTS.md`, with `CLAUDE.md` as a symlink.
   Ship briefs prompt crewmates to create or update those files through the normal delivery path; `data/projects.md` stays a thin private registry.
 - **Local clones stay fresh** - bootstrap and PR-based teardown refresh remote-backed project clones with clean default-branch fast-forwards when the clone is on the default branch and has no local work, and prune local branches whose remote is gone and that no worktree still needs.
-- **Restart-proof** - all state lives in tmux, status files, local markdown under `data/`, `data/secondmates.md`, and persistent secondmate homes.
+- **Restart-proof, with optional autostart** - all state lives in tmux, status files, local markdown under `data/`, `data/secondmates.md`, and persistent secondmate homes.
   Kill the first mate session anytime; the next one reconciles and carries on.
+  On WSL with systemd, `bin/fm-install-autostart.sh` installs `systemd/firstmate.service`, whose `bin/fm-resume.sh --watch` loop recreates the persistent `firstmate` tmux session after VM teardown, host reboot, or watchdog death.
 
 ## The bin/ toolbelt
 
@@ -148,6 +149,8 @@ The first mate drives these; you rarely need to, but they work by hand too.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `fm-bootstrap.sh`        | Detect missing or outdated toolchain pieces; refresh clones best-effort; install tools only after consent           |
 | `fm-fleet-sync.sh`       | Fetch clones, clean-fast-forward their checked-out default branches, and safely prune branches whose remote is gone |
+| `fm-install-autostart.sh` | Install, inspect, or remove the WSL systemd unit that keeps the persistent firstmate session alive across VM teardown |
+| `fm-resume.sh`           | Idempotently ensure the persistent firstmate tmux session exists; `--watch` repeats as the systemd watchdog loop     |
 | `fm-backlog-handoff.sh`  | Move already-judged in-scope queued backlog items from the main home into a seeded secondmate home                 |
 | `fm-brief.sh`            | Scaffold a ship brief, a report-only scout brief with `--scout`, or a secondmate charter with `--secondmate`      |
 | `fm-ensure-agents-md.sh` | Ensure project `AGENTS.md` is the real memory file and `CLAUDE.md` symlinks to it                                   |
@@ -204,6 +207,12 @@ FM_BUSY_REGEX='esc (to )?interrupt|Working\.\.\.'   # busy-pane signatures, shar
 FM_COMPOSER_IDLE_RE=    # optional empty-composer regex, applied after border stripping
 FM_SEND_RETRIES=3       # fm-send Enter-retry attempts after typing the line once
 FM_SEND_SLEEP=0.4       # seconds between fm-send submit checks
+FM_LOCK_STALE_AFTER=10  # seconds before a fresh empty lock file may be reclaimed as stale
+# crash/reboot autostart (bin/fm-resume.sh and systemd/firstmate.service)
+FM_SESSION=firstmate    # persistent supervisor tmux session name
+FM_CLAUDE_BIN=$HOME/.local/bin/claude   # firstmate harness binary used by fm-resume.sh
+FM_CONFIG_DIR=/mnt/c/Users/Owenz/.claude-orchestrator   # Claude config used by fm-resume.sh
+FM_RESUME_INTERVAL=60   # seconds between watchdog checks in fm-resume.sh --watch
 # sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk
 FM_SUPERVISOR_TARGET=firstmate:0   # supervisor tmux target (override; auto-discovers from $TMUX_PANE)
 FM_INJECT_SKIP=heartbeat           # |-prefixes force-self-handled bypassing classification; empty disables
@@ -224,11 +233,15 @@ Human-authored pull requests targeting `main` must be raised through `git push n
 Local `.no-mistakes/` state and test evidence stay out of this repo; `.no-mistakes.yaml` keeps evidence in a temp directory instead.
 The current watcher reliability work keeps the one-shot process model and adds a durable queue plus singleton lock.
 The presence-gated sub-supervisor (`bin/fm-supervise-daemon.sh`) provides proactive wake routing for walk-away supervision via the `/afk` skill; a blocking-waiter split remains a deferred follow-up phase.
+The crash/reboot resilience work adds a WSL systemd watchdog (`systemd/firstmate.service`) plus `fm-resume.sh`, and replaces wake-queue lock grants with an atomic `O_EXCL` file create so concurrent watchers cannot double-acquire the lock on WSL filesystems.
 
 ```sh
 bash -n bin/*.sh                          # syntax-check the toolbelt
 shellcheck bin/*.sh tests/*.sh            # lint the toolbelt and behavior tests; CI enforces this
 for test_script in tests/*.test.sh; do "$test_script"; done   # behavior tests, matching CI
+tests/fm-install-autostart.test.sh        # systemd unit rendering for the active checkout
+tests/fm-resume.test.sh                   # tmux session resurrection and idempotence under a private tmux server
+tests/fm-lock-exclusivity.test.sh         # wake-queue lock mutual exclusion, dead-holder reclaim, and live-holder protection
 tests/fm-wake-queue.test.sh               # durable wake queue, singleton behavior, sub-supervisor classifier, /afk presence-gating, border-aware composer, max-defer, and fm-send submit tests
 tests/fm-afk-inject-e2e.test.sh           # private-socket end-to-end test of the afk injection path (partial-input deferral, swallowed-Enter retry)
 tests/fm-bootstrap.test.sh                # bootstrap dependency and feature-probe tests
