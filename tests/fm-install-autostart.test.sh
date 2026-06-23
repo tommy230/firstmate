@@ -33,6 +33,18 @@ printf 'systemd\n'
 SH
 chmod +x "$TMP/bin/ps"
 
+cat > "$TMP/bin/id" <<'SH'
+#!/usr/bin/env bash
+case "${FM_FAKE_ID_MODE:-user}:$1" in
+  root:-u) printf '0\n' ;;
+  root:-un) printf 'root\n' ;;
+  user:-u) printf '1000\n' ;;
+  user:-un) printf 'tester\n' ;;
+  *) /usr/bin/id "$@" ;;
+esac
+SH
+chmod +x "$TMP/bin/id"
+
 UNIT_DST="$TMP/firstmate.service"
 FAKE="$TMP/fake-codex"
 cat > "$FAKE" <<'SH'
@@ -65,5 +77,37 @@ broken_status=$?
 [ "$broken_status" -ne 0 ] || fail "install succeeded with unknown harness"
 [ ! -f "$BROKEN_UNIT_DST" ] || fail "unit was written after launch command inference failed"
 printf '%s\n' "$broken_out" | grep -qF "cannot infer firstmate launch command" || fail "missing inference failure: $broken_out"
+
+PRIVILEGED_UNIT_DST="$TMP/privileged-firstmate.service"
+SUDO_LOG="$TMP/sudo.log"
+cat > "$TMP/bin/sudo" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$SUDO_LOG"
+case "\$1" in
+  install)
+    cp "\$4" "$PRIVILEGED_UNIT_DST"
+    ;;
+  systemctl|rm)
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+SH
+chmod +x "$TMP/bin/sudo"
+
+sudo_out=$(PATH="$TMP/bin:$PATH" FM_FIRSTMATE_HARNESS=codex FM_CODEX_BIN="$FAKE" FM_AUTOSTART_USER=tester FM_AUTOSTART_HOME="$TMP/home/tester" bash "$INSTALLER" install 2>&1) || fail "sudo-backed install failed: $sudo_out"
+[ -f "$PRIVILEGED_UNIT_DST" ] || fail "sudo-backed install did not write the unit"
+grep -qF "Environment=\"FM_FIRSTMATE_COMMAND=exec $FAKE --dangerously-bypass-approvals-and-sandbox\"" "$PRIVILEGED_UNIT_DST" || fail "sudo-backed install did not render from caller environment"
+grep -qF "install -m 0644" "$SUDO_LOG" || fail "install did not use sudo for the system unit"
+grep -qF "systemctl daemon-reload" "$SUDO_LOG" || fail "daemon-reload did not use sudo"
+
+SUDO_RENDER_UNIT_DST="$TMP/sudo-render-firstmate.service"
+sudo_render_out=$(PATH="$TMP/bin:$PATH" FM_FAKE_ID_MODE=root SUDO_USER=tester FM_UNIT_DST="$SUDO_RENDER_UNIT_DST" FM_FIRSTMATE_HARNESS=codex FM_CODEX_BIN="$FAKE" FM_AUTOSTART_HOME="$TMP/home/tester" bash "$INSTALLER" install 2>&1)
+sudo_render_status=$?
+[ "$sudo_render_status" -ne 0 ] || fail "sudo-invoked install without explicit command succeeded"
+[ ! -f "$SUDO_RENDER_UNIT_DST" ] || fail "sudo-invoked install wrote a unit before refusal"
+printf '%s\n' "$sudo_render_out" | grep -qF "run without sudo" || fail "missing sudo-render refusal: $sudo_render_out"
 
 pass "fm-install-autostart renders firstmate.service from the active checkout"

@@ -19,6 +19,7 @@ FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_SRC="$FM_ROOT/systemd/firstmate.service"
 UNIT_NAME="firstmate.service"
 UNIT_DST="${FM_UNIT_DST:-/etc/systemd/system/$UNIT_NAME}"
+SYSTEM_UNIT_DST="/etc/systemd/system/$UNIT_NAME"
 
 shell_quote() {
   local out
@@ -140,21 +141,43 @@ require_systemd() {
   fi
 }
 
+requires_privilege() {
+  [ "$UNIT_DST" = "$SYSTEM_UNIT_DST" ] || return 1
+  [ "$(id -u)" -ne 0 ]
+}
+
+run_privileged() {
+  if requires_privilege; then
+    sudo "$@"
+  else
+    "$@"
+  fi
+}
+
+refuse_ambiguous_sudo_render() {
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && [ -z "${FM_FIRSTMATE_COMMAND:-}" ]; then
+    echo "error: run without sudo so the firstmate launch command is captured from your user session" >&2
+    echo "       or set FM_FIRSTMATE_COMMAND explicitly when invoking through sudo" >&2
+    exit 1
+  fi
+}
+
 cmd_install() {
   local rendered
   require_systemd
   [ -f "$UNIT_SRC" ] || { echo "error: unit not found at $UNIT_SRC" >&2; exit 1; }
+  refuse_ambiguous_sudo_render
   rendered=$(mktemp "${TMPDIR:-/tmp}/firstmate.service.XXXXXX")
   trap 'rm -f "$rendered"' EXIT
   render_unit > "$rendered"
   # Install a copy (not a symlink): systemd does not follow symlinks under
   # /mnt/c reliably, and the repo path is not guaranteed mounted at early boot.
-  install -m 0644 "$rendered" "$UNIT_DST"
+  run_privileged install -m 0644 "$rendered" "$UNIT_DST"
   rm -f "$rendered"
   trap - EXIT
-  systemctl daemon-reload
-  systemctl enable "$UNIT_NAME"
-  systemctl restart "$UNIT_NAME"
+  run_privileged systemctl daemon-reload
+  run_privileged systemctl enable "$UNIT_NAME"
+  run_privileged systemctl restart "$UNIT_NAME"
   echo "installed and enabled $UNIT_NAME"
   echo "firstmate will now auto-resurrect on every boot and self-heal if it dies."
   cmd_status
@@ -162,10 +185,10 @@ cmd_install() {
 
 cmd_uninstall() {
   require_systemd
-  systemctl disable "$UNIT_NAME" 2>/dev/null || true
-  systemctl stop "$UNIT_NAME" 2>/dev/null || true
-  rm -f "$UNIT_DST"
-  systemctl daemon-reload
+  run_privileged systemctl disable "$UNIT_NAME" 2>/dev/null || true
+  run_privileged systemctl stop "$UNIT_NAME" 2>/dev/null || true
+  run_privileged rm -f "$UNIT_DST"
+  run_privileged systemctl daemon-reload
   echo "removed $UNIT_NAME (any running firstmate session was left untouched)"
 }
 
