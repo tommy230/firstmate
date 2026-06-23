@@ -68,3 +68,15 @@ printf '%s\n' "$out2" | grep -q "already live" || fail "second run should no-op:
 count=$("$REAL_TMUX" -L "$SOCK" list-sessions 2>/dev/null | grep -c '^fmtest:')
 [ "$count" -eq 1 ] || fail "expected exactly one fmtest session, got $count"
 pass "fm-resume is idempotent (no duplicate session)"
+
+# 3) launch-command inference failure under --watch must not wedge an empty session.
+FM_SESSION=fmfail FM_FIRSTMATE_HARNESS=unknown FM_RESUME_INTERVAL=1 PATH="$TMP/bin:$PATH" "$RESUME" --watch > "$TMP/watch-fail.out" 2>&1 &
+watch_pid=$!
+sleep 0.5
+kill "$watch_pid" 2>/dev/null || true
+wait "$watch_pid" 2>/dev/null || true
+if "$REAL_TMUX" -L "$SOCK" has-session -t fmfail 2>/dev/null; then
+  fail "watch mode created an empty session after launch command failure"
+fi
+grep -qF "cannot infer firstmate launch command" "$TMP/watch-fail.out" || fail "watch mode did not report launch command failure"
+pass "fm-resume --watch does not create an empty session after launch inference failure"

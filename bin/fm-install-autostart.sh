@@ -113,12 +113,14 @@ autostart_home() {
 }
 
 render_unit() {
-  local root command raw_user user home line
+  local root raw_command command raw_user user raw_home home line
   root=$(systemd_quote "$FM_ROOT")
-  command=$(systemd_quote "$(firstmate_command)")
+  raw_command=$(firstmate_command) || return 1
+  command=$(systemd_quote "$raw_command")
   raw_user=$(autostart_user)
   user=$(systemd_quote "$raw_user")
-  home=$(systemd_quote "$(autostart_home "$raw_user")")
+  raw_home=$(autostart_home "$raw_user") || return 1
+  home=$(systemd_quote "$raw_home")
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line//@FM_ROOT@/$root}
     line=${line//@FM_FIRSTMATE_COMMAND@/$command}
@@ -170,8 +172,16 @@ cmd_uninstall() {
 cmd_status() {
   require_systemd
   echo "--- unit ---"
-  systemctl is-enabled "$UNIT_NAME" 2>/dev/null | sed 's/^/enabled: /' || echo "enabled: no"
-  systemctl is-active "$UNIT_NAME" 2>/dev/null | sed 's/^/active: /' || echo "active: no"
+  if enabled=$(systemctl is-enabled "$UNIT_NAME" 2>/dev/null); then
+    printf 'enabled: %s\n' "$enabled"
+  else
+    echo "enabled: no"
+  fi
+  if active=$(systemctl is-active "$UNIT_NAME" 2>/dev/null); then
+    printf 'active: %s\n' "$active"
+  else
+    echo "active: no"
+  fi
   echo "--- session ---"
   if tmux has-session -t "${FM_SESSION:-firstmate}" 2>/dev/null; then
     echo "firstmate tmux session: LIVE (attach with: tmux attach -t ${FM_SESSION:-firstmate})"

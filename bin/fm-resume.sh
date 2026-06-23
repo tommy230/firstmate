@@ -90,7 +90,7 @@ ensure_session() {
   fi
 
   local launch command
-  command=$(firstmate_command)
+  command=$(firstmate_command) || return 1
   printf -v launch \
     'cd %q && %s' \
     "$FM_ROOT" "$command"

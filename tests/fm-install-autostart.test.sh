@@ -21,6 +21,7 @@ cat > "$TMP/bin/systemctl" <<'SH'
 #!/usr/bin/env bash
 case "$1" in
   daemon-reload|enable|restart) exit 0 ;;
+  is-enabled|is-active) exit 1 ;;
   *) exit 0 ;;
 esac
 SH
@@ -54,5 +55,15 @@ grep -qF "ExecStart=\"$ROOT/bin/fm-resume.sh\" --watch" "$UNIT_DST" || fail "Exe
 ! grep -qF '@FM_FIRSTMATE_COMMAND@' "$UNIT_DST" || fail "unit still contains launch command token"
 ! grep -qF '@FM_USER@' "$UNIT_DST" || fail "unit still contains user token"
 ! grep -qF '@FM_HOME@' "$UNIT_DST" || fail "unit still contains home token"
+
+printf '%s\n' "$out" | grep -qF "enabled: no" || fail "missing enabled fallback: $out"
+printf '%s\n' "$out" | grep -qF "active: no" || fail "missing active fallback: $out"
+
+BROKEN_UNIT_DST="$TMP/broken-firstmate.service"
+broken_out=$(PATH="$TMP/bin:$PATH" FM_UNIT_DST="$BROKEN_UNIT_DST" FM_FIRSTMATE_HARNESS=unknown FM_AUTOSTART_USER=tester FM_AUTOSTART_HOME="$TMP/home/tester" bash "$INSTALLER" install 2>&1)
+broken_status=$?
+[ "$broken_status" -ne 0 ] || fail "install succeeded with unknown harness"
+[ ! -f "$BROKEN_UNIT_DST" ] || fail "unit was written after launch command inference failed"
+printf '%s\n' "$broken_out" | grep -qF "cannot infer firstmate launch command" || fail "missing inference failure: $broken_out"
 
 pass "fm-install-autostart renders firstmate.service from the active checkout"
