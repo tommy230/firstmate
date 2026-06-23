@@ -95,6 +95,10 @@ fm_lock_try_acquire() {
       FM_LOCK_HELD_PID=$pid
       return 1
     fi
+    if [ -z "$pid" ] && [ "$(fm_path_age "$lockfile")" -lt "$FM_LOCK_STALE_AFTER" ]; then
+      FM_LOCK_HELD_PID=$pid
+      return 1
+    fi
     rm -rf "$lockfile" 2>/dev/null || true
   elif [ -e "$lockfile" ]; then
     pid=$(cat "$lockfile" 2>/dev/null || true)

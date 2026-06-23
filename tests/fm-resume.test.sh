@@ -49,7 +49,7 @@ EOF
 chmod +x "$FAKE"
 
 run_resume() {
-  PATH="$TMP/bin:$PATH" FM_SESSION=fmtest FM_CLAUDE_BIN="$FAKE" FM_CONFIG_DIR=/cfg/orch "$RESUME"
+  PATH="$TMP/bin:$PATH" FM_SESSION=fmtest FM_FIRSTMATE_HARNESS=claude FM_CLAUDE_BIN="$FAKE" FM_CONFIG_DIR=/cfg/orch "$RESUME"
 }
 
 # 1) create path: session made, firstmate launched with the right context.

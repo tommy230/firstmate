@@ -210,8 +210,10 @@ FM_SEND_SLEEP=0.4       # seconds between fm-send submit checks
 FM_LOCK_STALE_AFTER=10  # seconds before a fresh empty lock file may be reclaimed as stale
 # crash/reboot autostart (bin/fm-resume.sh and systemd/firstmate.service)
 FM_SESSION=firstmate    # persistent supervisor tmux session name
-FM_CLAUDE_BIN=$HOME/.local/bin/claude   # firstmate harness binary used by fm-resume.sh
-FM_CONFIG_DIR=/mnt/c/Users/Owenz/.claude-orchestrator   # Claude config used by fm-resume.sh
+FM_FIRSTMATE_HARNESS=   # optional explicit harness: claude, codex, opencode, or pi
+FM_FIRSTMATE_COMMAND=   # optional full launch command rendered into systemd autostart
+FM_CLAUDE_BIN=          # optional Claude binary path for fm-resume.sh
+FM_CONFIG_DIR=          # optional Claude config dir for fm-resume.sh
 FM_RESUME_INTERVAL=60   # seconds between watchdog checks in fm-resume.sh --watch
 # sub-supervisor (bin/fm-supervise-daemon.sh); presence-gated via /afk
 FM_SUPERVISOR_TARGET=firstmate:0   # supervisor tmux target (override; auto-discovers from $TMUX_PANE)

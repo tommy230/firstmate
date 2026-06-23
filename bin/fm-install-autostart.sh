@@ -20,6 +20,12 @@ UNIT_SRC="$FM_ROOT/systemd/firstmate.service"
 UNIT_NAME="firstmate.service"
 UNIT_DST="${FM_UNIT_DST:-/etc/systemd/system/$UNIT_NAME}"
 
+shell_quote() {
+  local out
+  printf -v out '%q' "$1"
+  printf '%s' "$out"
+}
+
 systemd_quote() {
   local value=$1
   value=${value//\\/\\\\}
@@ -27,11 +33,63 @@ systemd_quote() {
   printf '%s' "$value"
 }
 
+firstmate_bin() {
+  local harness=$1 var value
+  var="FM_$(printf '%s' "$harness" | tr '[:lower:]' '[:upper:]')_BIN"
+  eval "value=\${$var:-}"
+  if [ -n "$value" ]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  command -v "$harness"
+}
+
+firstmate_command() {
+  local harness bin config
+  if [ -n "${FM_FIRSTMATE_COMMAND:-}" ]; then
+    printf '%s\n' "$FM_FIRSTMATE_COMMAND"
+    return 0
+  fi
+  harness="${FM_FIRSTMATE_HARNESS:-}"
+  if [ -z "$harness" ]; then
+    harness=$("$FM_ROOT/bin/fm-harness.sh" 2>/dev/null || echo unknown)
+  fi
+  case "$harness" in
+    claude)
+      bin=$(firstmate_bin claude)
+      config="${FM_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-}}"
+      if [ -n "$config" ]; then
+        printf 'CLAUDE_CONFIG_DIR=%s IS_SANDBOX=1 exec %s --dangerously-skip-permissions\n' "$(shell_quote "$config")" "$(shell_quote "$bin")"
+      else
+        printf 'IS_SANDBOX=1 exec %s --dangerously-skip-permissions\n' "$(shell_quote "$bin")"
+      fi
+      ;;
+    codex)
+      bin=$(firstmate_bin codex)
+      printf 'exec %s --dangerously-bypass-approvals-and-sandbox\n' "$(shell_quote "$bin")"
+      ;;
+    opencode)
+      bin=$(firstmate_bin opencode)
+      printf 'OPENCODE_CONFIG_CONTENT=%s exec %s\n' "$(shell_quote '{"permission":{"*":"allow"}}')" "$(shell_quote "$bin")"
+      ;;
+    pi)
+      bin=$(firstmate_bin pi)
+      printf 'exec %s\n' "$(shell_quote "$bin")"
+      ;;
+    *)
+      echo "error: cannot infer firstmate launch command for harness '$harness'; set FM_FIRSTMATE_COMMAND" >&2
+      return 1
+      ;;
+  esac
+}
+
 render_unit() {
-  local root line
+  local root command line
   root=$(systemd_quote "$FM_ROOT")
+  command=$(systemd_quote "$(firstmate_command)")
   while IFS= read -r line || [ -n "$line" ]; do
-    printf '%s\n' "${line//@FM_ROOT@/$root}"
+    line=${line//@FM_ROOT@/$root}
+    printf '%s\n' "${line//@FM_FIRSTMATE_COMMAND@/$command}"
   done < "$UNIT_SRC"
 }
 

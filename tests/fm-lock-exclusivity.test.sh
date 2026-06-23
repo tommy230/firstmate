@@ -70,3 +70,13 @@ fi
 kill "$holder" 2>/dev/null || true
 rm -f "$LK"
 pass "lock reclaims a dead holder but never a live one"
+
+rm -rf "$LK"
+mkdir "$LK"
+if fm_lock_try_acquire "$LK"; then
+  fm_lock_release "$LK"
+  fail "reclaimed a fresh legacy empty-pid lock directory"
+fi
+[ -d "$LK" ] || fail "fresh legacy empty-pid lock directory was removed"
+rm -rf "$LK"
+pass "lock preserves fresh legacy empty-pid directories"

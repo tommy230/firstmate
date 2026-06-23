@@ -23,27 +23,77 @@ set -eu
 
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# How firstmate itself is launched. These mirror the captain's live session
-# exactly (verified from the running process): the REAL claude binary, not the
-# round-robin crew shim on PATH; the orchestrator account; sandbox + skip-perms
-# because firstmate runs as root inside an isolated WSL VM.
 SESSION="${FM_SESSION:-firstmate}"
-FM_CLAUDE_BIN="${FM_CLAUDE_BIN:-$HOME/.local/bin/claude}"
-FM_CONFIG_DIR="${FM_CONFIG_DIR:-/mnt/c/Users/Owenz/.claude-orchestrator}"
+FM_FIRSTMATE_HARNESS="${FM_FIRSTMATE_HARNESS:-}"
+FM_FIRSTMATE_COMMAND="${FM_FIRSTMATE_COMMAND:-}"
 FM_RESUME_INTERVAL="${FM_RESUME_INTERVAL:-60}"
+
+shell_quote() {
+  local out
+  printf -v out '%q' "$1"
+  printf '%s' "$out"
+}
+
+firstmate_bin() {
+  local harness=$1 var value
+  var="FM_$(printf '%s' "$harness" | tr '[:lower:]' '[:upper:]')_BIN"
+  eval "value=\${$var:-}"
+  if [ -n "$value" ]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  command -v "$harness"
+}
+
+firstmate_command() {
+  local harness bin config
+  if [ -n "$FM_FIRSTMATE_COMMAND" ]; then
+    printf '%s\n' "$FM_FIRSTMATE_COMMAND"
+    return 0
+  fi
+  harness=$FM_FIRSTMATE_HARNESS
+  if [ -z "$harness" ]; then
+    harness=$("$FM_ROOT/bin/fm-harness.sh" 2>/dev/null || echo unknown)
+  fi
+  case "$harness" in
+    claude)
+      bin=$(firstmate_bin claude)
+      config="${FM_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-}}"
+      if [ -n "$config" ]; then
+        printf 'CLAUDE_CONFIG_DIR=%s IS_SANDBOX=1 exec %s --dangerously-skip-permissions\n' "$(shell_quote "$config")" "$(shell_quote "$bin")"
+      else
+        printf 'IS_SANDBOX=1 exec %s --dangerously-skip-permissions\n' "$(shell_quote "$bin")"
+      fi
+      ;;
+    codex)
+      bin=$(firstmate_bin codex)
+      printf 'exec %s --dangerously-bypass-approvals-and-sandbox\n' "$(shell_quote "$bin")"
+      ;;
+    opencode)
+      bin=$(firstmate_bin opencode)
+      printf 'OPENCODE_CONFIG_CONTENT=%s exec %s\n' "$(shell_quote '{"permission":{"*":"allow"}}')" "$(shell_quote "$bin")"
+      ;;
+    pi)
+      bin=$(firstmate_bin pi)
+      printf 'exec %s\n' "$(shell_quote "$bin")"
+      ;;
+    *)
+      echo "error: cannot infer firstmate launch command for harness '$harness'; set FM_FIRSTMATE_COMMAND" >&2
+      return 1
+      ;;
+  esac
+}
 
 ensure_session() {
   if tmux has-session -t "$SESSION" 2>/dev/null; then
     return 0
   fi
 
-  # Build the firstmate launch command. Single-quoted values are expanded in the
-  # tmux pane's shell, not here. We exec the real binary by absolute path so a
-  # PATH that prefers the crew shim cannot misroute firstmate onto a worker account.
-  local launch
+  local launch command
+  command=$(firstmate_command)
   printf -v launch \
-    'cd %q && CLAUDE_CONFIG_DIR=%q IS_SANDBOX=1 exec %q --dangerously-skip-permissions' \
-    "$FM_ROOT" "$FM_CONFIG_DIR" "$FM_CLAUDE_BIN"
+    'cd %q && %s' \
+    "$FM_ROOT" "$command"
 
   # Target the session (active window) rather than a hardcoded ":0": tmux configs
   # commonly set base-index 1, so the first window is not always index 0.
