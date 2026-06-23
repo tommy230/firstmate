@@ -18,7 +18,27 @@ FM_LOCK_STALE_AFTER="${FM_LOCK_STALE_AFTER:-10}"
 mkdir -p "$STATE"
 
 fm_current_pid() {
-  printf '%s\n' "${BASHPID:-$$}"
+  if [ -n "${BASHPID:-}" ]; then
+    printf '%s\n' "$BASHPID"
+  else
+    sh -c 'printf "%s\n" "$PPID"'
+  fi
+}
+
+fm_assign_current_pid() {
+  local __var=$1 __tmp __pid
+  if [ -n "${BASHPID:-}" ]; then
+    eval "$__var=\$BASHPID"
+    return 0
+  fi
+  __tmp=$(mktemp "${TMPDIR:-/tmp}/fm-pid.XXXXXX") || return 1
+  sh -c 'printf "%s\n" "$PPID"' > "$__tmp" || {
+    rm -f "$__tmp" 2>/dev/null || true
+    return 1
+  }
+  IFS= read -r __pid < "$__tmp" || __pid=
+  rm -f "$__tmp" 2>/dev/null || true
+  eval "$__var=\$__pid"
 }
 
 fm_pid_alive() {
@@ -65,7 +85,7 @@ fm_lock_try_acquire() {
   # Compute the pid in THIS shell, not inside the O_EXCL subshell below (where
   # BASHPID would be the subshell's). Expanded before the subshell forks, so the
   # holder pid is written - and matches what fm_lock_release compares against.
-  me=${BASHPID:-$$}
+  fm_assign_current_pid me
 
   # If a reclaimable lock is present (dead holder, long-empty file, or a legacy
   # pre-O_EXCL directory), free it first. A LIVE holder's lock is never freed.
@@ -125,7 +145,7 @@ fm_lock_acquire_wait() {
 
 fm_lock_release() {
   local lockfile=$1 pid current
-  current=${BASHPID:-$$}
+  fm_assign_current_pid current
   # Remove only our own lock. A directory is the legacy format; treat its pid
   # file the same way so an in-flight upgrade releases cleanly.
   if [ -d "$lockfile" ]; then

@@ -22,22 +22,32 @@ export FM_STATE_OVERRIDE="$TMP"
 
 LK="$FM_WAKE_QUEUE_LOCK"
 CUR="$TMP/current"; BAD="$TMP/bad"; : > "$BAD"; echo init > "$CUR"
+WORKER="$TMP/worker.sh"
 
 # Canonical mutex test: while holding the lock, write our pid to a shared file
 # and read it back. With true mutual exclusion it is always our own pid; a
 # non-empty foreign pid means another holder ran concurrently (double-grant).
 # (An empty read is a transient fork artifact under load, not a double-grant.)
-worker() {
-  local _ who
-  for _ in $(seq 1 30); do
-    fm_lock_acquire_wait "$LK"
-    echo "$BASHPID" > "$CUR"
-    who=$(cat "$CUR" 2>/dev/null || true)
-    if [ -n "$who" ] && [ "$who" != "$BASHPID" ]; then echo "$who" >> "$BAD"; fi
-    fm_lock_release "$LK"
-  done
-}
-worker & worker & worker & worker & wait
+cat > "$WORKER" <<'SH'
+#!/usr/bin/env bash
+set -u
+root=$1 lock=$2 cur=$3 bad=$4
+# shellcheck source=bin/fm-wake-lib.sh
+. "$root/bin/fm-wake-lib.sh"
+for _ in $(seq 1 30); do
+  fm_lock_acquire_wait "$lock"
+  echo "$$" > "$cur"
+  who=$(cat "$cur" 2>/dev/null || true)
+  if [ -n "$who" ] && [ "$who" != "$$" ]; then echo "$who" >> "$bad"; fi
+  fm_lock_release "$lock"
+done
+SH
+chmod +x "$WORKER"
+"$WORKER" "$ROOT" "$LK" "$CUR" "$BAD" &
+"$WORKER" "$ROOT" "$LK" "$CUR" "$BAD" &
+"$WORKER" "$ROOT" "$LK" "$CUR" "$BAD" &
+"$WORKER" "$ROOT" "$LK" "$CUR" "$BAD" &
+wait
 
 doubles=$(grep -c . "$BAD" 2>/dev/null || true)
 [ "$doubles" -eq 0 ] || fail "lock double-granted $doubles time(s): a second holder overwrote shared state while the lock was held"
