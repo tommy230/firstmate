@@ -18,7 +18,22 @@ set -eu
 FM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_SRC="$FM_ROOT/systemd/firstmate.service"
 UNIT_NAME="firstmate.service"
-UNIT_DST="/etc/systemd/system/$UNIT_NAME"
+UNIT_DST="${FM_UNIT_DST:-/etc/systemd/system/$UNIT_NAME}"
+
+systemd_quote() {
+  local value=$1
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  printf '%s' "$value"
+}
+
+render_unit() {
+  local root line
+  root=$(systemd_quote "$FM_ROOT")
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "${line//@FM_ROOT@/$root}"
+  done < "$UNIT_SRC"
+}
 
 require_systemd() {
   if ! command -v systemctl >/dev/null 2>&1; then
@@ -32,11 +47,17 @@ require_systemd() {
 }
 
 cmd_install() {
+  local rendered
   require_systemd
   [ -f "$UNIT_SRC" ] || { echo "error: unit not found at $UNIT_SRC" >&2; exit 1; }
+  rendered=$(mktemp "${TMPDIR:-/tmp}/firstmate.service.XXXXXX")
+  trap 'rm -f "$rendered"' EXIT
+  render_unit > "$rendered"
   # Install a copy (not a symlink): systemd does not follow symlinks under
   # /mnt/c reliably, and the repo path is not guaranteed mounted at early boot.
-  install -m 0644 "$UNIT_SRC" "$UNIT_DST"
+  install -m 0644 "$rendered" "$UNIT_DST"
+  rm -f "$rendered"
+  trap - EXIT
   systemctl daemon-reload
   systemctl enable "$UNIT_NAME"
   systemctl restart "$UNIT_NAME"

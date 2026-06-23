@@ -393,20 +393,6 @@ if [ -d "$WT" ] && [ "$FORCE" != "--force" ]; then
       echo "The report is the work product. Have the crewmate write it (or get the captain's explicit OK to discard, then --force)." >&2
       exit 1
     fi
-  elif [ "$MODE" = local-only ]; then
-    # local-only ships have no remote, so the "on a remote" test never passes.
-    # The work is safe once it is merged into the local default branch (firstmate
-    # does that merge on the captain's approval). Refuse until then.
-    DEFAULT=$(default_branch) || { echo "REFUSED: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master." >&2; exit 1; }
-    dirty=$(git -C "$WT" status --porcelain 2>/dev/null | grep -vE '\.claude/settings\.local\.json|^\?\? \.claude/' | head -1 || true)
-    unmerged=$(git -C "$WT" log --oneline HEAD --not "$DEFAULT" -- 2>/dev/null | head -5 || true)
-    if [ -n "$dirty" ] || [ -n "$unmerged" ]; then
-      echo "REFUSED: local-only worktree $WT has work not yet merged into $DEFAULT." >&2
-      [ -n "$dirty" ] && echo "uncommitted changes present" >&2
-      [ -n "$unmerged" ] && printf 'commits not yet on %s:\n%s\n' "$DEFAULT" "$unmerged" >&2
-      echo "Merge the branch into local $DEFAULT first (bin/fm-merge-local.sh after the captain approves), or get the captain's explicit OK to discard, then --force." >&2
-      exit 1
-    fi
   else
     # The fm-spawn hook file is ours, never work product; ignore it in the dirty check.
     dirty=$(git -C "$WT" status --porcelain 2>/dev/null | grep -vE '\.claude/settings\.local\.json|^\?\? \.claude/' | head -1 || true)
@@ -414,10 +400,25 @@ if [ -d "$WT" ] && [ "$FORCE" != "--force" ]; then
     # remote-tracking branch (empty result here). A fork is a remote too, so
     # upstream-contribution PRs pushed to a fork satisfy this regardless of mode.
     unpushed=$(git -C "$WT" log --oneline HEAD --not --remotes -- 2>/dev/null | head -5 || true)
-    if [ -n "$dirty" ] || [ -n "$unpushed" ]; then
+    if [ -n "$dirty" ]; then
       echo "REFUSED: worktree $WT has work not on any remote." >&2
-      [ -n "$dirty" ] && echo "uncommitted changes present" >&2
-      [ -n "$unpushed" ] && printf 'unpushed commits:\n%s\n' "$unpushed" >&2
+      echo "uncommitted changes present" >&2
+      echo "Push the branch (or get the captain's explicit OK to discard, then --force)." >&2
+      exit 1
+    fi
+    if [ -n "$unpushed" ] && [ "$MODE" = local-only ]; then
+      DEFAULT=$(default_branch) || { echo "REFUSED: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master." >&2; exit 1; }
+      unmerged=$(git -C "$WT" log --oneline HEAD --not "$DEFAULT" -- 2>/dev/null | head -5 || true)
+      if [ -n "$unmerged" ]; then
+        echo "REFUSED: local-only worktree $WT has work not on any remote or local $DEFAULT." >&2
+        printf 'unpushed commits:\n%s\n' "$unpushed" >&2
+        printf 'commits not yet on %s:\n%s\n' "$DEFAULT" "$unmerged" >&2
+        echo "Push the branch, merge it into local $DEFAULT first (bin/fm-merge-local.sh after the captain approves), or get the captain's explicit OK to discard, then --force." >&2
+        exit 1
+      fi
+    elif [ -n "$unpushed" ]; then
+      echo "REFUSED: worktree $WT has work not on any remote." >&2
+      printf 'unpushed commits:\n%s\n' "$unpushed" >&2
       echo "Push the branch (or get the captain's explicit OK to discard, then --force)." >&2
       exit 1
     fi
