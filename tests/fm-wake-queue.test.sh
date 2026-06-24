@@ -303,6 +303,98 @@ SH
   pass "check output is queued before cadence suppression"
 }
 
+# Regression for a missed PR merge wake: a check wake must survive a crash
+# between durable enqueue and suppression-marker advance.
+test_check_wake_survives_lost_delivery() {
+  local dir state fakebin out drain_out check_file seen_check crash_status
+  dir=$(make_case check-lossless)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  drain_out="$dir/drain.out"
+  check_file="$state/pr-3095.check.sh"
+  seen_check="$state/.seen-check-pr-3095.check.sh"
+  cat > "$check_file" <<'SH'
+#!/usr/bin/env bash
+printf 'merged: https://example.test/pr/3095\n'
+SH
+  chmod +x "$check_file"
+
+  PATH="$fakebin:$PATH" FM_WATCH_BREAK_AFTER_CHECK_ENQUEUE=1 FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2>/dev/null &
+  wait_for_exit "$!" 40
+  crash_status=$?
+  [ "$crash_status" -eq 99 ] || fail "crashing watcher did not simulate post-enqueue crash (exit $crash_status)"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after simulated crash failed"
+  grep "$(printf '\tcheck\t')" "$drain_out" | grep -F "$check_file" | grep -F 'merged: https://example.test/pr/3095' >/dev/null \
+    || fail "check wake was not durable before suppression"
+  [ ! -e "$seen_check" ] || fail "seen-check marker advanced before simulated crash"
+
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2>/dev/null &
+  wait_for_exit "$!" 40 || fail "watcher did not re-detect unsuppressed check wake"
+  grep -F "check: $check_file: merged: https://example.test/pr/3095" "$out" >/dev/null \
+    || fail "check wake was not re-detected after failed suppression"
+  [ "$(cat "$seen_check" 2>/dev/null || true)" = "merged: https://example.test/pr/3095" ] \
+    || fail "seen-check marker was not advanced after successful wake"
+  pass "check wake is enqueued before suppression so lost delivery is recovered"
+}
+
+test_check_dedup_suppresses_repeats() {
+  local dir state fakebin out drain_out check_file count
+  dir=$(make_case check-dedup)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  drain_out="$dir/drain.out"
+  check_file="$state/repeating.check.sh"
+  cat > "$check_file" <<'SH'
+#!/usr/bin/env bash
+printf 'merged\n'
+SH
+  chmod +x "$check_file"
+
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  wait_for_exit "$!" 40 || fail "watcher did not exit for first repeated check"
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  wait_for_exit "$!" 3 && fail "watcher emitted a duplicate check wake"
+  kill "$!" 2>/dev/null || true
+  wait "$!" 2>/dev/null || true
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after repeated check failed"
+  count=$(grep -c "$(printf '\tcheck\t')" "$drain_out" || true)
+  [ "$count" -eq 1 ] || fail "expected 1 deduped check wake, got $count"
+  pass "watcher-side .seen-check dedup suppresses repeated identical check output"
+}
+
+test_catch_all_escalates_swallowed_transition() {
+  local dir state fakebin out drain_out check_file sidecar escalated
+  dir=$(make_case check-catchall)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  drain_out="$dir/drain.out"
+  check_file="$state/legacy-pr.check.sh"
+  sidecar="$state/.babysit-legacy-pr.seen"
+  escalated="$state/.escalated-.babysit-legacy-pr.seen"
+  printf 'MERGED|comment-a comment-b\n' > "$sidecar"
+  cat > "$check_file" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$check_file"
+
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  wait_for_exit "$!" 40 || fail "watcher did not exit for catch-all check"
+  grep -F "check: catch-all: $sidecar: MERGED" "$out" >/dev/null || fail "catch-all did not print swallowed terminal transition"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after catch-all failed"
+  grep "$(printf '\tcheck\t')" "$drain_out" | grep -F "$sidecar" | grep -F 'MERGED' >/dev/null \
+    || fail "catch-all check wake was not queued"
+  [ "$(cat "$escalated" 2>/dev/null || true)" = "MERGED|comment-a comment-b" ] \
+    || fail "catch-all escalation marker was not written"
+  pass "catch-all force-escalates a swallowed terminal check transition"
+}
+
 test_singleton_start() {
   local dir state fakebin out1 out2 pid1 pid2 live
   dir=$(make_case singleton)
@@ -1276,6 +1368,9 @@ test_concurrent_append_and_drain
 test_signal_catchup_without_running_watcher
 test_stale_enqueue_before_suppressor
 test_check_output_is_queued
+test_check_wake_survives_lost_delivery
+test_check_dedup_suppresses_repeats
+test_catch_all_escalates_swallowed_transition
 test_singleton_start
 test_atomic_double_drain
 test_drain_dedupes_obvious_duplicates

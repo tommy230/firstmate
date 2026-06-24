@@ -87,7 +87,7 @@ state/               volatile runtime signals; gitignored
   .wake-queue        durable queued wakes: epoch<TAB>seq<TAB>kind<TAB>key<TAB>payload
   .afk               durable away-mode flag; present = sub-supervisor may inject escalations (set by /afk, cleared on user return)
   .watch.lock .wake-queue.lock watcher singleton and queue serialization locks
-  .hash-* .count-* .stale-* .seen-* .last-* .heartbeat-streak   watcher internals; never touch
+  .hash-* .count-* .stale-* .seen-* .babysit-* .escalated-* .last-* .heartbeat-streak   watcher internals; never touch
   .last-watcher-beat watcher liveness beacon, touched every poll; fm-guard.sh reads it
   .subsuper-* .supervise-daemon.*   sub-supervisor internals (stale markers, escalation buffer, inject-wedged marker, seen-status dedup, log, lock, pid); never touch
 .no-mistakes/        local validation state and evidence; gitignored
@@ -439,7 +439,7 @@ Use chat for yes/no decisions; use lavish-axi when there are multiple findings o
 For PR-based ship tasks, the ready signal depends on mode: `no-mistakes` reports `done: PR <url> checks green` after CI is green, while `direct-PR` reports `done: PR <url>` after opening the PR.
 Run `bin/fm-pr-check.sh <id> <PR url>` - it records `pr=` in the task's meta and arms the watcher's merge poll.
 Tell the captain: the PR's full URL (always the complete `https://...` link, never a bare `#number` - the captain's terminal makes a full URL clickable), a one-paragraph summary, and, for `no-mistakes`, the risk level it emitted.
-(The check contract, for any custom `state/<id>.check.sh` you write yourself: print one line only when firstmate should wake, print nothing otherwise, and finish before `FM_CHECK_TIMEOUT`.)
+(The check contract, for any custom `state/<id>.check.sh` you write yourself: prefer printing the current terminal state every run, such as `echo "merged"` while merged. The watcher dedups repeated output with `.seen-check-<name>` and enqueues to the durable queue before advancing that marker, so a lost stdout or crashed watcher cannot swallow a wake. Edge-triggered checks that self-suppress with `.babysit-*.seen` still work, but a swallowed terminal transition then relies on the watcher catch-all backstop. Finish before `FM_CHECK_TIMEOUT`.)
 
 If the captain says "merge it", run `gh-axi pr merge` yourself; that instruction is the explicit approval. If `yolo=on`, merge a green/approved PR yourself and post the required FYI.
 
@@ -485,7 +485,7 @@ From there the task is an ordinary ship task through its mode-specific validatio
 The watcher is the backbone.
 Whenever at least one task is in flight, `bin/fm-watch.sh` must be running as a background task.
 It costs zero tokens while running and exits with one reason line when something needs you.
-It also writes each detected wake to the durable queue at `state/.wake-queue` before advancing suppression markers such as `.seen-*`, `.stale-*`, `.last-check`, or `.last-heartbeat`.
+It also writes each detected wake to the durable queue at `state/.wake-queue` before advancing suppression markers such as `.seen-*`, `.stale-*`, `.seen-check-*`, `.escalated-*`, `.last-check`, or `.last-heartbeat`.
 At the start of every wake-handling turn and every recovery turn, run `bin/fm-wake-drain.sh` before peeking panes, reading status files beyond the reason line, or starting new work.
 The printed one-shot reason line is still useful, but the drained queue is the lossless backlog.
 After handling drained wakes, re-arm `bin/fm-watch.sh` before you end the turn.

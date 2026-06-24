@@ -273,6 +273,31 @@ test_local_only_force_overrides_unpushed() {
   pass "local-only worktree with unpushed work is torn down under --force (escape hatch)"
 }
 
+test_teardown_removes_check_dedup_state() {
+  local case_dir rc
+  case_dir=$(make_case check-dedup-cleanup)
+  write_meta "$case_dir" no-mistakes ship
+  wt_commit "$case_dir" "shippable work"
+  git -C "$case_dir/wt" push -q origin fm/task-x1
+  git -C "$case_dir/project" fetch -q origin
+  printf '#!/usr/bin/env bash\nprintf merged\\n\n' > "$case_dir/state/task-x1.check.sh"
+  printf 'merged\n' > "$case_dir/state/.seen-check-task-x1.check.sh"
+  printf 'MERGED|https://example.test/pr/1\n' > "$case_dir/state/.babysit-task-x1.seen"
+  printf 'MERGED|https://example.test/pr/1\n' > "$case_dir/state/.escalated-.babysit-task-x1.seen"
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "check-cleanup: teardown should succeed"
+  [ ! -e "$case_dir/state/task-x1.check.sh" ] || fail "check-cleanup: check script remained"
+  [ ! -e "$case_dir/state/.seen-check-task-x1.check.sh" ] || fail "check-cleanup: seen-check marker remained"
+  [ ! -e "$case_dir/state/.babysit-task-x1.seen" ] || fail "check-cleanup: babysit sidecar remained"
+  [ ! -e "$case_dir/state/.escalated-.babysit-task-x1.seen" ] || fail "check-cleanup: escalated marker remained"
+  pass "teardown removes watcher check dedup state"
+}
+
 test_local_only_fork_remote_allows
 test_teardown_prompts_tasks_axi_done_when_compatible
 test_local_only_truly_unpushed_refuses
@@ -280,3 +305,4 @@ test_local_only_merged_to_local_main_allows
 test_no_mistakes_origin_remote_allows
 test_no_mistakes_truly_unpushed_refuses
 test_local_only_force_overrides_unpushed
+test_teardown_removes_check_dedup_state

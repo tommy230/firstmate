@@ -4,7 +4,9 @@
 #   signal: <file>...     a crewmate wrote a status line or a turn-end hook fired; signals
 #                         landing within FM_SIGNAL_GRACE of each other coalesce into one wake
 #   stale: <window>       a crewmate pane stopped changing and shows no busy signature
-#   check: <script>: <out> a per-task check script (e.g. merged-PR poll) produced output
+#   check: <script>: <out> a per-task check produced output (deduped by the watcher;
+#                         enqueued before suppression so the wake is lossless), or the
+#                         catch-all force-escalated a swallowed terminal transition
 #   heartbeat              fleet review due; starts at FM_HEARTBEAT and backs off to FM_HEARTBEAT_MAX
 # Run as a background task. Re-arm it after handling each wake; duplicate
 # invocations no-op through the watcher singleton lock.
@@ -101,6 +103,10 @@ recorded_windows() {
   done
 }
 
+# Collapse a check/sidecar basename into a safe suffix for watcher-side state
+# files (.seen-check-*, .escalated-*). LC_ALL=C keeps the mapping byte-stable.
+sanitize_name() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'; }
+
 # Exit reporting a wake. Consecutive heartbeats with no other wake in between
 # mean an idle fleet, so the heartbeat interval backs off exponentially
 # (base * 2^streak, capped at HEARTBEAT_MAX); any real wake resets the cadence.
@@ -168,16 +174,47 @@ while :; do
   # keeps producing signals - the slow poll (e.g. merge detection) would then
   # never run until the fleet went quiet. Checks are due only every
   # CHECK_INTERVAL, so most cycles skip this block and fall straight through.
+  #
+  # Lossless check wakes: checks used to be the sole wake source whose
+  # suppression could live inside an opaque script. If an edge-triggered check
+  # advanced its own .babysit-*.seen marker before stdout became a delivered
+  # wake, a timeout, crash, or concurrent run could permanently swallow the
+  # transition. Suppression now lives in the watcher for stateless checks:
+  # enqueue first, then advance .seen-check-<name>. Old self-suppressing checks
+  # still work, and the catch-all below force-escalates terminal sidecars.
   if [ "$(age_of "$STATE/.last-check")" -ge "$CHECK_INTERVAL" ]; then
     for c in "$STATE"/*.check.sh; do
       [ -e "$c" ] || continue
       out=$(run_check "$c")
-      if [ -n "$out" ]; then
+      [ -n "$out" ] || continue
+      sf="$STATE/.seen-check-$(sanitize_name "$(basename "$c")")"
+      if [ "$out" != "$(cat "$sf" 2>/dev/null || true)" ]; then
         reason="check: $c: $out"
         fm_wake_append check "$c" "$reason" || exit 1
+        # Test-only hook: prove the wake is durable by simulating a crash
+        # between enqueue and suppress. Never set outside the test suite.
+        [ -n "${FM_WATCH_BREAK_AFTER_CHECK_ENQUEUE:-}" ] && exit 99
+        printf '%s' "$out" > "$sf"
         touch "$STATE/.last-check"
         wake "$reason"
       fi
+    done
+
+    for sf in "$STATE"/.babysit-*.seen; do
+      [ -e "$sf" ] || continue
+      terminal=$(cat "$sf" 2>/dev/null || true)
+      state=${terminal%%|*}
+      case "$state" in
+        MERGED|CLOSED) ;;
+        *) continue ;;
+      esac
+      ec="$STATE/.escalated-$(sanitize_name "$(basename "$sf")")"
+      [ "$terminal" = "$(cat "$ec" 2>/dev/null || true)" ] && continue
+      reason="check: catch-all: $sf: $state"
+      fm_wake_append check "$sf" "$reason" || exit 1
+      printf '%s' "$terminal" > "$ec"
+      touch "$STATE/.last-check"
+      wake "$reason"
     done
     touch "$STATE/.last-check"
   fi

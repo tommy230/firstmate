@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Record a PR-ready task: appends pr=<url> to state/<id>.meta and arms the
-# watcher's merge poll by writing state/<id>.check.sh, which prints one line iff
-# the PR is merged (the watcher's check contract: output = wake firstmate,
-# silence = keep sleeping).
+# watcher's merge poll by writing state/<id>.check.sh. Once the PR is merged,
+# the check prints the current terminal state every run; the watcher dedups the
+# repeated output and enqueues the first delta before advancing suppression.
+# Silence means "no current terminal state; keep sleeping."
 # Usage: fm-pr-check.sh <task-id> <pr-url>
 set -eu
 
