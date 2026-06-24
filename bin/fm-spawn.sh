@@ -27,7 +27,8 @@
 # mode/yolo are resolved per-project from data/projects.md for ship/scout tasks;
 # secondmate spawns record mode=secondmate, yolo=off, home=, and projects=.
 # backend=tmux-treehouse is the current implemented worker backend. Future Codex
-# Desktop workers should add their own backend value without removing these fields.
+# Desktop workers should add their own backend value only when a real project/thread
+# API exists, without removing these fields.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -140,6 +141,64 @@ launch_template() {
   esac
 }
 
+current_worker_backend() {
+  printf '%s\n' "${FM_WORKER_BACKEND:-tmux-treehouse}"
+}
+
+require_supported_worker_backend() {
+  local backend=$1
+  case "$backend" in
+    tmux-treehouse) ;;
+    codex-desktop)
+      echo "error: worker backend codex-desktop is not implemented; no callable Codex Desktop project/thread API exists yet" >&2
+      return 1
+      ;;
+    *)
+      echo "error: unsupported worker backend '$backend'" >&2
+      return 1
+      ;;
+  esac
+}
+
+worker_environment() {
+  if [ "$KIND" = secondmate ]; then
+    printf '%s\n' firstmate-home
+  else
+    printf '%s\n' treehouse
+  fi
+}
+
+worker_id() {
+  printf '%s\n' "$T"
+}
+
+worker_project_path() {
+  printf '%s\n' "$PROJ_ABS"
+}
+
+write_spawn_meta() {
+  local environment
+  environment=$(worker_environment)
+  mkdir -p "$STATE"
+  {
+    echo "backend=$BACKEND"
+    echo "worker_id=$(worker_id)"
+    echo "worker_project_path=$(worker_project_path)"
+    echo "environment=$environment"
+    echo "window=$T"
+    echo "worktree=$WT"
+    echo "project=$PROJ_ABS"
+    echo "harness=$HARNESS"
+    echo "kind=$KIND"
+    echo "mode=$MODE"
+    echo "yolo=$YOLO"
+    if [ "$KIND" = secondmate ]; then
+      echo "home=$PROJ_ABS"
+      echo "projects=$SECONDMATE_PROJECTS"
+    fi
+  } > "$STATE/$ID.meta"
+}
+
 case "$ARG3" in
   *' '*)  # raw launch command (unverified-adapter escape hatch)
     LAUNCH=$ARG3
@@ -157,6 +216,9 @@ case "$ARG3" in
     LAUNCH=$(launch_template "$HARNESS" "$KIND") || { echo "error: unknown harness '$HARNESS'; pass a raw launch command to use an unverified adapter" >&2; exit 1; }
     ;;
 esac
+
+BACKEND=$(current_worker_backend)
+require_supported_worker_backend "$BACKEND" || exit 1
 
 secondmate_registry_value() {
   local id=$1 key=$2 reg line value
@@ -404,7 +466,6 @@ fi
 # Recorded in meta so fm-teardown's safety check and the validate/merge stages can
 # branch on them. Mode governs ship tasks; a scout's deliverable is a report, not a
 # merge, so scout teardown ignores mode.
-BACKEND=tmux-treehouse
 SECONDMATE_PROJECTS=
 if [ "$KIND" = secondmate ]; then
   MODE=secondmate
@@ -417,28 +478,7 @@ $("$FM_ROOT/bin/fm-project-mode.sh" "$PROJ_NAME")
 EOF
 fi
 
-mkdir -p "$STATE"
-{
-  echo "backend=$BACKEND"
-  echo "worker_id=$T"
-  echo "worker_project_path=$PROJ_ABS"
-  if [ "$KIND" = secondmate ]; then
-    echo "environment=firstmate-home"
-  else
-    echo "environment=treehouse"
-  fi
-  echo "window=$T"
-  echo "worktree=$WT"
-  echo "project=$PROJ_ABS"
-  echo "harness=$HARNESS"
-  echo "kind=$KIND"
-  echo "mode=$MODE"
-  echo "yolo=$YOLO"
-  if [ "$KIND" = secondmate ]; then
-    echo "home=$PROJ_ABS"
-    echo "projects=$SECONDMATE_PROJECTS"
-  fi
-} > "$STATE/$ID.meta"
+write_spawn_meta
 
 sq_brief=$(shell_quote "$BRIEF")
 sq_turnend=$(shell_quote "$TURNEND")
