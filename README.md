@@ -134,7 +134,7 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
   After seeding a secondmate, `fm-backlog-handoff.sh` moves already-judged in-scope queued items from the main backlog into that secondmate home so the domain queue starts in the right place.
   Idle secondmate panes are healthy; teardown is explicit and refuses while the secondmate home has in-flight work unless the captain has approved discard with `--force`.
 - **Project modes are explicit** - `data/projects.md` records each project's delivery mode and optional `+yolo` autonomy flag.
-  `no-mistakes` projects run the full validation pipeline, `direct-PR` projects open PRs without that pipeline, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
+  `no-mistakes` projects run the full validation pipeline, `direct-PR` projects run the PR-readiness audit before opening PRs without that pipeline, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
 - **Project memory belongs to projects** - durable project-intrinsic agent knowledge lives in each project's committed `AGENTS.md`, with `CLAUDE.md` as a symlink.
   Ship briefs prompt crewmates to create or update those files through the normal delivery path; `data/projects.md` stays a thin private registry.
 - **Local clones stay fresh** - bootstrap and PR-based teardown refresh remote-backed project clones with clean default-branch fast-forwards when the clone is on the default branch and has no local work, and prune local branches whose remote is gone and that no worktree still needs.
@@ -231,6 +231,7 @@ Human-authored pull requests targeting `main` must be raised through `git push n
 Local `.no-mistakes/` state and test evidence stay out of this repo; `.no-mistakes.yaml` keeps evidence in a temp directory instead.
 The current watcher reliability work keeps the one-shot process model and adds a durable queue plus singleton lock.
 The presence-gated sub-supervisor (`bin/fm-supervise-daemon.sh`) provides proactive wake routing for walk-away supervision via the `/afk` skill; a blocking-waiter split remains a deferred follow-up phase.
+The `pr-readiness` skill audits live GitHub/base facts, current-base overlap, validation, and public PR text before firstmate opens, updates, comments on, presents, or asks maintainers to merge a PR.
 
 ```sh
 bash -n bin/*.sh                          # syntax-check the toolbelt

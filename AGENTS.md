@@ -309,7 +309,7 @@ Do not eagerly backfill every project.
 **Delivery mode (choose at add).** `<mode>` is how a finished change reaches `main`, picked per project when you add it and recorded in the registry line (`fm-project-mode.sh` parses it; `fm-spawn` records it into each task's meta):
 
 - `no-mistakes` (default; `[...]` may be omitted) - full pipeline -> PR -> captain merge. Highest assurance.
-- `direct-PR` - push + open a PR via `gh-axi`, no pipeline -> captain merge.
+- `direct-PR` - run `pr-readiness`, push + open a PR via `gh-axi`, no pipeline -> captain merge.
 - `local-only` - local branch, no remote, no PR; firstmate reviews the diff, the captain approves, firstmate merges to local `main` (section 7).
 
 Orthogonal to mode is an optional `+yolo` flag (`[direct-PR +yolo]`), default off and **not recommended**: with `yolo` on, firstmate makes the approval decisions itself instead of asking the captain (section 7). When the captain adds a project without saying, default to `no-mistakes` with yolo off; only set a faster mode or `+yolo` on the captain's explicit say-so.
@@ -411,7 +411,7 @@ Its charter retargets escalation to the main firstmate's status file, so routine
 A ship task's path from `done` to landed on `main` is set by the project's `mode` (recorded in meta; section 6); `yolo` decides who approves. The Validate / PR ready / Ship teardown stages below are written for the `no-mistakes` path; the other modes diverge:
 
 - **no-mistakes** - the stages below as written: no-mistakes validation pipeline -> PR -> captain merge.
-- **direct-PR** - no pipeline. The crewmate pushes and opens the PR itself (its brief says so) and reports `done: PR <url>`. Skip the Validate step and go straight to PR ready (run `fm-pr-check`, relay the PR). Teardown uses the normal pushed-branch check.
+- **direct-PR** - no pipeline. The crewmate runs the `pr-readiness` audit, then pushes and opens the PR itself (its brief says so) and reports `done: PR <url>`. Skip the Validate step and go straight to PR ready (run the same readiness audit on the opened PR if facts may have changed, then `fm-pr-check`, then relay the PR). Teardown uses the normal pushed-branch check.
 - **local-only** - no remote, no PR. The crewmate stops at `done: ready in branch fm/<id>`. Review the diff with `bin/fm-review-diff.sh <id>`, relay a one-paragraph summary to the captain, and on approval run `bin/fm-merge-local.sh <id>` to fast-forward local `main` (it refuses anything but a clean fast-forward - if it does, have the crewmate rebase). No `fm-pr-check`. Then teardown, whose safety check requires the branch already merged into local `main`, OR the work pushed to any remote (a fork counts - relevant for upstream-contribution PRs on a local-only-registered project).
 
 When reviewing any crewmate branch diff, use `bin/fm-review-diff.sh <id>` rather than `git diff <default>...branch` directly.
@@ -437,11 +437,14 @@ Use chat for yes/no decisions; use lavish-axi when there are multiple findings o
 ### PR ready
 
 For PR-based ship tasks, the ready signal depends on mode: `no-mistakes` reports `done: PR <url> checks green` after CI is green, while `direct-PR` reports `done: PR <url>` after opening the PR.
+Before telling the captain the PR is ready, asking a maintainer to review or merge, updating PR public text, or commenting with a replacement branch, use the `pr-readiness` skill to audit live GitHub/base facts, mergeability, current-base overlap, validation, and maintainer-facing text.
+If that audit finds stale base, conflicts, missing checks, internal transcript language, or broad unrelated scope, stop and resolve it before any public PR action.
 Run `bin/fm-pr-check.sh <id> <PR url>` - it records `pr=` in the task's meta and arms the watcher's merge poll.
 Tell the captain: the PR's full URL (always the complete `https://...` link, never a bare `#number` - the captain's terminal makes a full URL clickable), a one-paragraph summary, and, for `no-mistakes`, the risk level it emitted.
 (The check contract, for any custom `state/<id>.check.sh` you write yourself: print one line only when firstmate should wake, print nothing otherwise, and finish before `FM_CHECK_TIMEOUT`.)
 
-If the captain says "merge it", run `gh-axi pr merge` yourself; that instruction is the explicit approval. If `yolo=on`, merge a green/approved PR yourself and post the required FYI.
+If the captain says "merge it", run the `pr-readiness` audit again if the ready facts may be stale, then run `gh-axi pr merge` yourself; that instruction is the explicit approval.
+If `yolo=on`, merge a green/approved PR yourself only after the same readiness audit passes, then post the required FYI.
 
 ### Ship teardown (only after merge is confirmed)
 
@@ -681,7 +684,7 @@ Secondmates inherit this automatically: each secondmate home carries the same `A
 ## 11. Crewmate briefs
 
 Scaffold with `bin/fm-brief.sh <id> <repo-name>` - it writes `data/<id>/brief.md` with the standard contract (branch setup, status-reporting protocol, push/merge rules, definition of done) and all paths filled in.
-For a ship task the definition of done is shaped by the project's delivery mode (section 6): `no-mistakes` ends in the harness-appropriate no-mistakes validation pipeline, `direct-PR` has the crewmate push and open the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally.
+For a ship task the definition of done is shaped by the project's delivery mode (section 6): `no-mistakes` ends in the harness-appropriate no-mistakes validation pipeline, `direct-PR` has the crewmate run `pr-readiness` before pushing and opening the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally.
 The scaffold reads the mode via `fm-project-mode.sh`, so you do not pass it.
 Ship briefs also include the project-memory contract: run `bin/fm-ensure-agents-md.sh` when the project already has agent-memory files or when the task produced durable project-intrinsic knowledge, then record proportionate learnings in `AGENTS.md`.
 For scout tasks add `--scout`: the scaffold swaps the definition of done for the report contract (findings to `data/<id>/report.md`, no branch, no push, no PR) and declares the worktree scratch; scout is mode-agnostic.
