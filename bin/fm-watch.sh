@@ -107,6 +107,25 @@ recorded_windows() {
 # files (.seen-check-*, .escalated-*). LC_ALL=C keeps the mapping byte-stable.
 sanitize_name() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'; }
 
+mark_matching_babysit_escalated() {
+  local c=$1 base id sidecar terminal state ec
+  base=$(basename "$c")
+  case "$base" in
+    *.check.sh) id=${base%.check.sh} ;;
+    *) return 0 ;;
+  esac
+  sidecar="$STATE/.babysit-$id.seen"
+  [ -e "$sidecar" ] || return 0
+  terminal=$(cat "$sidecar" 2>/dev/null || true)
+  state=${terminal%%|*}
+  case "$state" in
+    MERGED|CLOSED) ;;
+    *) return 0 ;;
+  esac
+  ec="$STATE/.escalated-$(sanitize_name "$(basename "$sidecar")")"
+  printf '%s' "$terminal" > "$ec"
+}
+
 # Exit reporting a wake. Consecutive heartbeats with no other wake in between
 # mean an idle fleet, so the heartbeat interval backs off exponentially
 # (base * 2^streak, capped at HEARTBEAT_MAX); any real wake resets the cadence.
@@ -194,6 +213,7 @@ while :; do
         # Test-only hook: prove the wake is durable by simulating a crash
         # between enqueue and suppress. Never set outside the test suite.
         [ -n "${FM_WATCH_BREAK_AFTER_CHECK_ENQUEUE:-}" ] && exit 99
+        mark_matching_babysit_escalated "$c"
         printf '%s' "$out" > "$sf"
         touch "$STATE/.last-check"
         wake "$reason"

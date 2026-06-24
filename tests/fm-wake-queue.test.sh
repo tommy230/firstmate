@@ -395,6 +395,42 @@ SH
   pass "catch-all force-escalates a swallowed terminal check transition"
 }
 
+test_normal_check_marks_matching_legacy_sidecar_escalated() {
+  local dir state fakebin out drain_out check_file sidecar escalated count pid
+  dir=$(make_case check-sidecar-dedup)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  drain_out="$dir/drain.out"
+  check_file="$state/legacy-pr.check.sh"
+  sidecar="$state/.babysit-legacy-pr.seen"
+  escalated="$state/.escalated-.babysit-legacy-pr.seen"
+  printf 'MERGED|comment-a comment-b\n' > "$sidecar"
+  cat > "$check_file" <<'SH'
+#!/usr/bin/env bash
+printf 'merged\n'
+SH
+  chmod +x "$check_file"
+
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  wait_for_exit "$!" 40 || fail "watcher did not exit for normal legacy check"
+  grep -F "check: $check_file: merged" "$out" >/dev/null || fail "normal check wake did not print"
+  [ "$(cat "$escalated" 2>/dev/null || true)" = "MERGED|comment-a comment-b" ] \
+    || fail "normal check did not mark matching sidecar escalated"
+
+  : > "$out"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=0 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 3 && fail "watcher emitted duplicate catch-all wake"
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" || fail "drain after normal legacy check failed"
+  count=$(grep -c "$(printf '\tcheck\t')" "$drain_out" || true)
+  [ "$count" -eq 1 ] || fail "expected 1 check wake after legacy sidecar dedup, got $count"
+  pass "normal check wake marks matching legacy sidecar escalated"
+}
+
 test_singleton_start() {
   local dir state fakebin out1 out2 pid1 pid2 live
   dir=$(make_case singleton)
@@ -1371,6 +1407,7 @@ test_check_output_is_queued
 test_check_wake_survives_lost_delivery
 test_check_dedup_suppresses_repeats
 test_catch_all_escalates_swallowed_transition
+test_normal_check_marks_matching_legacy_sidecar_escalated
 test_singleton_start
 test_atomic_double_drain
 test_drain_dedupes_obvious_duplicates
