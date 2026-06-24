@@ -26,8 +26,8 @@
 # On success prints: spawned <id> backend=<backend> harness=<name> kind=<ship|scout|secondmate> mode=<mode> yolo=<on|off> window=<session:window> worktree=<path>
 # mode/yolo are resolved per-project from data/projects.md for ship/scout tasks;
 # secondmate spawns record mode=secondmate, yolo=off, home=, and projects=.
-# backend=tmux-treehouse is the legacy worker backend. Future Codex Desktop
-# workers should add their own backend value without removing these fields.
+# backend=tmux-treehouse is the current implemented worker backend. Future Codex
+# Desktop workers should add their own backend value without removing these fields.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

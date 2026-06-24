@@ -394,8 +394,8 @@ bin/fm-spawn.sh <id1>=projects/<repo1> <id2>=projects/<repo2> [--scout]   # batc
 Dispatch several tasks in one call by passing `id=repo` pairs instead of a single `<id> <project>`; each pair is spawned through the same single-task path, a shared `--scout` applies to all, and the looping happens inside the script so you never hand-write a multi-task shell loop.
 If one pair fails, the rest still run and the batch exits non-zero.
 
-The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `backend=tmux-treehouse`, `worker_id=`, `worker_project_path=`, `environment=`, `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
-The backend fields are the integration seam for Codex Desktop-native workers: future Desktop project-thread spawns should use `backend=codex-desktop` plus thread/project identifiers, while missing `backend=` in older metadata means the legacy tmux/treehouse backend.
+The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `backend=tmux-treehouse`, `worker_id=`, `worker_project_path=`, `environment=`, `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta for the currently implemented worker path; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
+The backend fields are the integration seam for Codex Desktop-native workers: future Desktop project-thread spawns should use `backend=codex-desktop` plus thread/project identifiers, while missing `backend=` in older metadata is interpreted as `tmux-treehouse` for compatibility during the migration.
 Do not fake Codex Desktop project or thread creation in shell scripts; add that backend only when a real callable Desktop API exists.
 For `kind=secondmate`, the same script launches in the registered or explicit firstmate home instead of running `treehouse get` for a project, records `home=` and `projects=`, and uses the charter brief as the launch prompt.
 
@@ -436,7 +436,7 @@ Pooled clones keep their local default refs frozen at clone time and can lag `or
 
 For ordinary ship tasks, validate with Fast Gate: focused relevant checks for the touched area, lint/typecheck only when relevant and cheap, diff review, committed result, and a risk summary listing checks run and checks skipped.
 Escalate to full no-mistakes when the change is security-sensitive, release/deploy-related, a dependency upgrade, a broad refactor, spans multiple subsystems, or the captain explicitly asks.
-Fast Gate is lighter on validation breadth, not workspace safety: ship work still runs in an isolated Codex Worktree mode in the future or the legacy treehouse worktree today.
+Fast Gate is lighter on validation breadth, not workspace safety: ship work still runs in an isolated Codex Worktree mode in the future or the current treehouse worktree implementation today.
 
 For a full no-mistakes escalation, trigger validation using the crew's harness from `state/<id>.meta`.
 Use `/no-mistakes` for claude, `$no-mistakes` for codex; natural language also works.

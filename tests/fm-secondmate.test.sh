@@ -1081,7 +1081,7 @@ test_secondmate_spawn_records_home_meta() {
     || fail "secondmate spawn failed"
 
   meta="$home/state/spawn-sub.meta"
-  grep -Fx 'backend=tmux-treehouse' "$meta" >/dev/null || fail "meta did not record legacy worker backend"
+  grep -Fx 'backend=tmux-treehouse' "$meta" >/dev/null || fail "meta did not record implemented worker backend"
   grep -Fx 'worker_id=firstmate:fm-spawn-sub' "$meta" >/dev/null || fail "meta did not record worker id"
   grep -Fx "worker_project_path=$subhome_abs" "$meta" >/dev/null || fail "meta did not record worker project path"
   grep -Fx 'environment=firstmate-home' "$meta" >/dev/null || fail "meta did not record worker environment"
