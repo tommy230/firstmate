@@ -82,7 +82,7 @@ projects/            cloned repos; gitignored; READ-ONLY for you
 state/               volatile runtime signals; gitignored
   <id>.status        appended by crewmates: "<state>: <note>" lines
   <id>.turn-ended    touched by turn-end hooks
-  <id>.meta          written by fm-spawn: window=, worktree=, project=, harness=, kind=, mode=, yolo=; kind=secondmate also records home= and projects= (fm-pr-check appends pr=)
+  <id>.meta          written by fm-spawn: backend=, worker_id=, worker_project_path=, environment=, window=, worktree=, project=, harness=, kind=, mode=, yolo=; kind=secondmate also records home= and projects= (fm-pr-check appends pr=)
   <id>.check.sh      optional slow poll you write per task (e.g. merged-PR check)
   .wake-queue        durable queued wakes: epoch<TAB>seq<TAB>kind<TAB>key<TAB>payload
   .afk               durable away-mode flag; present = sub-supervisor may inject escalations (set by /afk, cleared on user return)
@@ -252,6 +252,10 @@ The registry line records the project name, delivery mode, optional `+yolo` post
 Add the line when you clone or create a project, keep the description useful for identifying the project, and drop the line if a project is ever removed from `projects/`.
 Do not turn the registry into a knowledge dump.
 Durable descriptive detail belongs in the project's own `AGENTS.md`.
+Treat this registry as a work-destination registry, not a list of every tool involved in the fleet.
+Work repos are valid task destinations.
+Tooling repos, including Kun tooling repos such as firstmate, treehouse, no-mistakes, gh-axi, chrome-devtools-axi, and lavish-axi, are dependencies/orchestration tools unless the task explicitly edits that tooling repo.
+Do not route ordinary product/app work into a tooling repo merely because the request mentions that tool.
 
 `data/secondmates.md` is the secondmate routing table.
 Every persistent secondmate has one line:
@@ -306,11 +310,11 @@ Create a project's `AGENTS.md` lazily on first need.
 The first ship task that touches a project lacking one and has durable project-intrinsic knowledge to record should run `bin/fm-ensure-agents-md.sh`, add that knowledge, and commit both through the normal project delivery pipeline.
 Do not eagerly backfill every project.
 
-**Delivery mode (choose at add).** `<mode>` is how a finished change reaches `main`, picked per project when you add it and recorded in the registry line (`fm-project-mode.sh` parses it; `fm-spawn` records it into each task's meta):
+**Delivery mode (choose at add).** `<mode>` is how a finished change reaches `main`, picked per project when you add it and recorded in the registry line (`fm-project-mode.sh` parses it; `fm-spawn` records it into each task's meta). Delivery mode is separate from validation gate: Fast Gate is the default for ordinary ship work; full no-mistakes is reserved for high-risk, release/deploy, security-sensitive, dependency, broad-refactor, multi-subsystem, or explicitly requested work.
 
-- `no-mistakes` (default; `[...]` may be omitted) - full pipeline -> PR -> captain merge. Highest assurance.
-- `direct-PR` - run `pr-readiness`, push + open a PR via `gh-axi`, no pipeline -> captain merge.
-- `local-only` - local branch, no remote, no PR; firstmate reviews the diff, the captain approves, firstmate merges to local `main` (section 7).
+- `no-mistakes` (default; `[...]` may be omitted) - PR-capable mode; ordinary work starts with Fast Gate, and full no-mistakes remains the high-assurance escalation/fallback.
+- `direct-PR` - Fast Gate, run `pr-readiness`, push + open a PR via `gh-axi`, no full pipeline -> captain merge.
+- `local-only` - Fast Gate on a local branch, no remote, no PR; firstmate reviews the diff, the captain approves, firstmate merges to local `main` (section 7).
 
 Orthogonal to mode is an optional `+yolo` flag (`[direct-PR +yolo]`), default off and **not recommended**: with `yolo` on, firstmate makes the approval decisions itself instead of asking the captain (section 7). When the captain adds a project without saying, default to `no-mistakes` with yolo off; only set a faster mode or `+yolo` on the captain's explicit say-so.
 
@@ -363,7 +367,7 @@ When you create a new secondmate, hand its in-scope queued items off from the ma
 
 Then classify the shape:
 
-- **Ship** (the default): the deliverable is a change to the project. It ships through the project's delivery mode: `no-mistakes`, `direct-PR`, or `local-only`.
+- **Ship** (the default): the deliverable is a change to the project. Ordinary ship work validates through Fast Gate and lands through the project's delivery mode: `no-mistakes`, `direct-PR`, or `local-only`. Escalate to full no-mistakes for high-risk, release/deploy, security-sensitive, dependency, broad-refactor, multi-subsystem, or explicitly requested work.
 - **Scout:** the deliverable is knowledge - an investigation, a plan, a bug reproduction, an audit. It ends in a report at `data/<id>/report.md`, never a PR. When the captain asks "what's wrong", "how would we", or "find out why" about a project, that is a scout task; dispatch it instead of doing the digging yourself.
 
 Then classify readiness:
@@ -390,7 +394,9 @@ bin/fm-spawn.sh <id1>=projects/<repo1> <id2>=projects/<repo2> [--scout]   # batc
 Dispatch several tasks in one call by passing `id=repo` pairs instead of a single `<id> <project>`; each pair is spawned through the same single-task path, a shared `--scout` applies to all, and the looping happens inside the script so you never hand-write a multi-task shell loop.
 If one pair fails, the rest still run and the batch exits non-zero.
 
-The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
+The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `backend=tmux-treehouse`, `worker_id=`, `worker_project_path=`, `environment=`, `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
+The backend fields are the integration seam for Codex Desktop-native workers: future Desktop project-thread spawns should use `backend=codex-desktop` plus thread/project identifiers, while missing `backend=` in older metadata means the legacy tmux/treehouse backend.
+Do not fake Codex Desktop project or thread creation in shell scripts; add that backend only when a real callable Desktop API exists.
 For `kind=secondmate`, the same script launches in the registered or explicit firstmate home instead of running `treehouse get` for a project, records `home=` and `projects=`, and uses the charter brief as the launch prompt.
 
 For ship and scout tasks, the script creates the window (in your current tmux session, or a dedicated `firstmate` session when you are outside tmux), runs `treehouse get`, waits for the worktree subshell, installs the turn-end hook, records `state/<id>.meta`, and launches the agent with the brief.
@@ -408,12 +414,12 @@ Its charter retargets escalation to the main firstmate's status file, so routine
 
 ### Delivery modes and yolo
 
-A ship task's path from `done` to landed on `main` is set by the project's `mode` (recorded in meta; section 6); `yolo` decides who approves. The Validate / PR ready / Ship teardown stages below are written for the `no-mistakes` path; the other modes diverge:
+A ship task's path from `done` to landed on `main` is set by the project's `mode` (recorded in meta; section 6); `yolo` decides who approves. Validation is Fast Gate by default, with full no-mistakes as the high-assurance escalation path. The PR ready / Ship teardown stages below remain mode-specific:
 
-- **no-mistakes** - the stages below as written: no-mistakes validation pipeline -> PR -> captain merge.
-- **direct-PR** - no pipeline.
+- **no-mistakes** - Fast Gate for ordinary work; escalate to full no-mistakes when risk, repo policy, or captain instruction requires it.
+- **direct-PR** - no full pipeline.
   The crewmate runs the `pr-readiness` audit, then pushes and opens the PR itself (its brief says so) and reports `done: PR <url>`.
-  Skip the Validate step and go straight to PR ready (run the same readiness audit on the opened PR if facts may have changed, then `fm-pr-check`, then relay the PR).
+  Fast Gate happens before push; then go straight to PR ready (run the same readiness audit on the opened PR if facts may have changed, then `fm-pr-check`, then relay the PR).
   Teardown uses the normal pushed-branch check.
 - **local-only** - no remote, no PR.
   The crewmate stops at `done: ready in branch fm/<id>`.
@@ -428,7 +434,11 @@ Pooled clones keep their local default refs frozen at clone time and can lag `or
 
 ### Validate
 
-For `no-mistakes`-mode ship tasks, when a crewmate's status says `done`, trigger validation using the crew's harness from `state/<id>.meta`.
+For ordinary ship tasks, validate with Fast Gate: focused relevant checks for the touched area, lint/typecheck only when relevant and cheap, diff review, committed result, and a risk summary listing checks run and checks skipped.
+Escalate to full no-mistakes when the change is security-sensitive, release/deploy-related, a dependency upgrade, a broad refactor, spans multiple subsystems, or the captain explicitly asks.
+Fast Gate is lighter on validation breadth, not workspace safety: ship work still runs in an isolated Codex Worktree mode in the future or the legacy treehouse worktree today.
+
+For a full no-mistakes escalation, trigger validation using the crew's harness from `state/<id>.meta`.
 Use `/no-mistakes` for claude, `$no-mistakes` for codex; natural language also works.
 For example, with claude:
 
@@ -443,7 +453,7 @@ Use chat for yes/no decisions; use lavish-axi when there are multiple findings o
 
 ### PR ready
 
-For PR-based ship tasks, the ready signal depends on mode: `no-mistakes` reports `done: PR <url> checks green` after CI is green, while `direct-PR` reports `done: PR <url>` after opening the PR.
+For PR-based ship tasks, the ready signal depends on validation and mode: full no-mistakes reports `done: PR <url> checks green` after CI is green, while Fast Gate work reports a committed branch or PR with checks and risk summary.
 Before telling the captain the PR is ready, asking a maintainer to review or merge, updating PR public text, or commenting with a replacement branch, use the `pr-readiness` skill to audit live GitHub/base facts, mergeability, current-base overlap, validation, and maintainer-facing text.
 If that audit finds stale base, conflicts, missing checks, internal transcript language, or broad unrelated scope, stop and resolve it before any public PR action.
 Run `bin/fm-pr-check.sh <id> <PR url>` - it records `pr=` in the task's meta and arms the watcher's merge poll.
@@ -691,7 +701,7 @@ Secondmates inherit this automatically: each secondmate home carries the same `A
 ## 11. Crewmate briefs
 
 Scaffold with `bin/fm-brief.sh <id> <repo-name>` - it writes `data/<id>/brief.md` with the standard contract (branch setup, status-reporting protocol, push/merge rules, definition of done) and all paths filled in.
-For a ship task the definition of done is shaped by the project's delivery mode (section 6): `no-mistakes` ends in the harness-appropriate no-mistakes validation pipeline, `direct-PR` has the crewmate run `pr-readiness` before pushing and opening the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally.
+For a ship task, Fast Gate is the default definition of done unless the project or task escalates to full no-mistakes: focused relevant checks, cheap relevant lint/typecheck, diff review, commit, and risk summary. Delivery mode still decides PR/local merge mechanics: `direct-PR` has the crewmate run `pr-readiness` before pushing and opening the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally, and `no-mistakes` remains the high-assurance escalation/fallback.
 The scaffold reads the mode via `fm-project-mode.sh`, so you do not pass it.
 Ship briefs also include the project-memory contract: run `bin/fm-ensure-agents-md.sh` when the project already has agent-memory files or when the task produced durable project-intrinsic knowledge, then record proportionate learnings in `AGENTS.md`.
 For scout tasks add `--scout`: the scaffold swaps the definition of done for the report contract (findings to `data/<id>/report.md`, no branch, no push, no PR) and declares the worktree scratch; scout is mode-agnostic.

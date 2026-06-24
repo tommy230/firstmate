@@ -16,10 +16,12 @@
 #   only captain-relevant escalations append to this home's status file.
 #   Set FM_SECONDMATE_CHARTER='<charter>' to fill the charter text.
 #   Set FM_SECONDMATE_SCOPE='<scope>' to write a routing scope distinct from the charter text.
-# For ship tasks, the definition of done is shaped by the project's delivery mode
-# (data/projects.md via fm-project-mode.sh; see AGENTS.md sections 6-7):
-#   no-mistakes  implement -> /no-mistakes pipeline -> PR -> captain merge (default)
-#   direct-PR    implement -> push + open PR via gh-axi (no pipeline) -> captain merge
+# For ship tasks, validation defaults to Fast Gate (isolated worktree, focused
+# checks, diff review, commit, risk summary). The project's delivery mode still
+# controls PR/local merge mechanics (data/projects.md via fm-project-mode.sh;
+# see AGENTS.md sections 6-7):
+#   no-mistakes  Fast Gate by default; full no-mistakes only for high assurance
+#   direct-PR    Fast Gate -> push + open PR via gh-axi -> captain merge
 #   local-only   implement on branch, stop and report "ready in branch" (no push/PR);
 #                firstmate reviews, captain approves, firstmate merges to local main
 # Scout tasks ignore mode - their deliverable is a report, not a merge.
@@ -162,9 +164,9 @@ case "$MODE" in
     RULE1='1. Never push to the default branch (push only your `fm/'"$ID"'` branch). Never merge a PR.'
     DOD=$(cat <<EOF
 # Definition of done
-This project ships **direct-PR**: you raise the PR yourself, without the no-mistakes pipeline.
-The task is complete only when committed on your branch.
-When it is implemented and committed, push your branch and open a PR with \`gh-axi\`, then append \`done: PR {url}\` to the status file and stop.
+This project ships **direct-PR**: you raise the PR yourself after Fast Gate, without the full no-mistakes pipeline.
+Fast Gate means: run focused relevant checks for the files/behavior you changed; run lint/typecheck only when relevant and cheap; review your diff; commit the finished change; write a short risk summary with checks run and checks skipped.
+When it is implemented, checked, diff-reviewed, and committed, push your branch and open a PR with \`gh-axi\`, then append \`done: PR {url}; checks {summary}; risk {low|medium|high}\` to the status file and stop.
 Do NOT run /no-mistakes. The captain reviews and merges the PR; firstmate relays it.
 EOF
 )
@@ -174,25 +176,24 @@ EOF
     RULE1="1. Never push to any remote and never open a PR. Work only on your \`fm/$ID\` branch; firstmate handles the merge into local \`main\`."
     DOD=$(cat <<EOF
 # Definition of done
-This project ships **local-only**: no remote, no PR, no pipeline.
-The task is complete only when committed on your branch \`fm/$ID\`. Do NOT push, do NOT open a PR, do NOT merge.
+This project ships **local-only**: no remote, no PR, no full no-mistakes pipeline.
+Fast Gate means: run focused relevant checks for the files/behavior you changed; run lint/typecheck only when relevant and cheap; review your diff; commit the finished change; write a short risk summary with checks run and checks skipped.
+The task is complete only when Fast Gate is done and the change is committed on your branch \`fm/$ID\`. Do NOT push, do NOT open a PR, do NOT merge.
 Keep your branch a clean fast-forward onto the current default branch - if \`main\` has advanced, rebase onto it so the eventual merge stays a fast-forward.
-When it is implemented and committed, append \`done: ready in branch fm/$ID\` to the status file and stop.
+When it is implemented, checked, diff-reviewed, and committed, append \`done: ready in branch fm/$ID; checks {summary}; risk {low|medium|high}\` to the status file and stop.
 Firstmate then reviews your branch diff, the captain approves, and firstmate merges it into local \`main\`.
 EOF
 )
     ;;
-  *)  # no-mistakes (default)
-    SETUP2="
-2. Run \`no-mistakes doctor\`; if it reports the repo is not initialized here, run \`no-mistakes init\`."
+  *)  # no-mistakes delivery mode; Fast Gate is the ordinary-work default.
+    SETUP2=""
     RULE1='1. Never push to the default branch. Never merge a PR.'
     DOD=$(cat <<EOF
 # Definition of done
-The task is complete only when committed on your branch.
-When you believe it is complete, append \`done: {summary}\` to the status file and stop.
-Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
-During validation, fix auto-fix findings yourself; escalate ask-user findings per rule 6.
-After /no-mistakes reports CI green, append \`done: PR {url} checks green\` and stop. You are finished.
+Fast Gate is the default for ordinary ship work: run focused relevant checks for the files/behavior you changed; run lint/typecheck only when relevant and cheap; review your diff; commit the finished change; write a short risk summary with checks run and checks skipped.
+Escalate before final status if the work is security-sensitive, release/deploy-related, a dependency upgrade, a broad refactor, spans multiple subsystems, or the task explicitly requests full no-mistakes.
+When Fast Gate is done and the change is committed, append \`done: {summary}; checks {summary}; risk {low|medium|high}\` to the status file and stop.
+If firstmate escalates this task to full no-mistakes, run the harness-appropriate no-mistakes flow then append \`done: PR {url} checks green\` after CI is green. You are finished.
 EOF
 )
     ;;

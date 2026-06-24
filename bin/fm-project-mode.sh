@@ -9,15 +9,16 @@
 #   - <name> [<mode> +yolo] - <desc> (added <date>)    -> <mode> on
 #
 # mode = how a finished change reaches main:
-#   no-mistakes  full pipeline -> PR -> captain merge (default)
-#   direct-PR    push + PR via gh-axi, no pipeline -> captain merge
+#   no-mistakes  PR-capable legacy default; full pipeline only for high assurance
+#   direct-PR    push + PR via gh-axi, no full pipeline -> captain merge
 #   local-only   local branch, no remote/PR -> firstmate review -> captain approve -> local merge
 # yolo (orthogonal) = when on, firstmate makes approval decisions itself (PR merges,
 #   ask-user findings, local-only merge approval) without checking the captain - except
 #   anything destructive/irreversible/security-sensitive, which still escalates.
 #
 # An unknown/missing project or unknown mode falls back to "no-mistakes off" and warns
-# to stderr, so a typo never silently drops the gate.
+# to stderr, so a typo never silently drops the legacy fallback while work/tooling
+# registry split and Codex Desktop project resolution mature.
 # Usage: fm-project-mode.sh <project-name>
 set -eu
 

@@ -23,9 +23,11 @@
 #     __PIEXT__    absolute path to state/<task-id>.pi-ext.ts (pi turn-end extension,
 #                  written by this script; outside the worktree to avoid pi's trust gate)
 # Per-harness turn-end hooks are installed automatically; some live outside the worktree.
-# On success prints: spawned <id> harness=<name> kind=<ship|scout|secondmate> mode=<mode> yolo=<on|off> window=<session:window> worktree=<path>
+# On success prints: spawned <id> backend=<backend> harness=<name> kind=<ship|scout|secondmate> mode=<mode> yolo=<on|off> window=<session:window> worktree=<path>
 # mode/yolo are resolved per-project from data/projects.md for ship/scout tasks;
 # secondmate spawns record mode=secondmate, yolo=off, home=, and projects=.
+# backend=tmux-treehouse is the legacy worker backend. Future Codex Desktop
+# workers should add their own backend value without removing these fields.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -402,6 +404,7 @@ fi
 # Recorded in meta so fm-teardown's safety check and the validate/merge stages can
 # branch on them. Mode governs ship tasks; a scout's deliverable is a report, not a
 # merge, so scout teardown ignores mode.
+BACKEND=tmux-treehouse
 SECONDMATE_PROJECTS=
 if [ "$KIND" = secondmate ]; then
   MODE=secondmate
@@ -416,6 +419,14 @@ fi
 
 mkdir -p "$STATE"
 {
+  echo "backend=$BACKEND"
+  echo "worker_id=$T"
+  echo "worker_project_path=$PROJ_ABS"
+  if [ "$KIND" = secondmate ]; then
+    echo "environment=firstmate-home"
+  else
+    echo "environment=treehouse"
+  fi
   echo "window=$T"
   echo "worktree=$WT"
   echo "project=$PROJ_ABS"
@@ -443,4 +454,4 @@ tmux send-keys -t "$T" -l "$LAUNCH"
 sleep 0.3
 tmux send-keys -t "$T" Enter
 
-echo "spawned $ID harness=$HARNESS kind=$KIND mode=$MODE yolo=$YOLO window=$T worktree=$WT"
+echo "spawned $ID backend=$BACKEND harness=$HARNESS kind=$KIND mode=$MODE yolo=$YOLO window=$T worktree=$WT"

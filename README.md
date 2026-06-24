@@ -120,8 +120,12 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
   A pull-based guard (`bin/fm-guard.sh`) warns through supervision tool output if tasks are in flight and that watcher stops running or queued wakes are waiting to be drained.
   A presence-gated sub-supervisor (`bin/fm-supervise-daemon.sh`) extends this for walk-away supervision: the `/afk` skill activates it, after which it self-handles routine wakes in bash and escalates only captain-relevant events as one batched, single-line digest (prefixed with an in-band sentinel marker so firstmate can tell daemon injections apart from real messages).
   Its injection path shares `bin/fm-tmux-lib.sh` with `fm-send.sh`, so dim-ghost-aware and border-aware composer detection plus verified submit retry stay consistent; stalled escalation delivery raises `state/.subsuper-inject-wedged` after `FM_MAX_DEFER_SECS` instead of silently deferring forever.
+- **Worker backend is explicit** - current workers use the legacy `tmux-treehouse` backend: a tmux window plus a treehouse worktree, recorded in `state/<id>.meta`.
+  That metadata is the migration seam for future Codex Desktop project-thread workers; missing `backend=` still means the legacy path.
 - **Worktrees, not branches in your checkout** - crewmates never touch your clone; treehouse pools clean worktrees so parallel tasks on one repo cannot collide.
-- **Two task shapes** - ship tasks change projects and ship by project mode (`no-mistakes`, `direct-PR`, or `local-only`); scout tasks investigate, plan, reproduce bugs, or audit, then leave a report at `data/<id>/report.md` and never push.
+- **Two task shapes** - ship tasks change projects and ship by project mode (`no-mistakes`, `direct-PR`, or `local-only`); ordinary ship work uses Fast Gate by default: isolated worktree, focused checks, diff review, commit, and risk summary.
+  Full no-mistakes is reserved for high-risk, release/deploy, security-sensitive, dependency, broad-refactor, multi-subsystem, or explicitly requested work.
+  Scout tasks investigate, plan, reproduce bugs, or audit, then leave a report at `data/<id>/report.md` and never push.
 - **Optional secondmates** - `data/secondmates.md` records persistent domain supervisors with natural-language scopes, project clone lists, and home paths.
   `fm-home-seed.sh` provisions the isolated home, clones the listed PR-based projects into it, initializes newly cloned `no-mistakes` projects, copies the charter to `data/charter.md`, and `fm-spawn.sh --secondmate` launches it through the same tmux and status-file path as any direct report.
   When seeded with `-`, the home is a durable treehouse lease under the secondmate id, so it survives with no live process and is not recycled by later `treehouse get` or pruning.
@@ -133,8 +137,9 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
   Secondmates are idle by default: after startup recovery reconciles only work already in their own home, an empty queue waits silently for routed tasks, and they never self-initiate surveys or audits.
   After seeding a secondmate, `fm-backlog-handoff.sh` moves already-judged in-scope queued items from the main backlog into that secondmate home so the domain queue starts in the right place.
   Idle secondmate panes are healthy; teardown is explicit and refuses while the secondmate home has in-flight work unless the captain has approved discard with `--force`.
-- **Project modes are explicit** - `data/projects.md` records each project's delivery mode and optional `+yolo` autonomy flag.
-  `no-mistakes` projects run the full validation pipeline, `direct-PR` projects run the PR-readiness audit before opening PRs without that pipeline, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
+- **Project modes are explicit** - `data/projects.md` records each work repo's delivery mode and optional `+yolo` autonomy flag.
+  Tooling repos are not ordinary work destinations unless the task edits that tool repo.
+  `no-mistakes` remains the high-assurance escalation/fallback, `direct-PR` projects run the PR-readiness audit before opening PRs without the full pipeline, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
 - **Project memory belongs to projects** - durable project-intrinsic agent knowledge lives in each project's committed `AGENTS.md`, with `CLAUDE.md` as a symlink.
   Ship briefs prompt crewmates to create or update those files through the normal delivery path; `data/projects.md` stays a thin private registry.
 - **Local clones stay fresh** - bootstrap and PR-based teardown refresh remote-backed project clones with clean default-branch fast-forwards when the clone is on the default branch and has no local work, and prune local branches whose remote is gone and that no worktree still needs.

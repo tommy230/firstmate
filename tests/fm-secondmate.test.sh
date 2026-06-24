@@ -221,6 +221,12 @@ test_fm_home_parameterization() {
   brief="$home_one/data/task-a/brief.md"
   [ -f "$brief" ] || fail "brief was not written under FM_HOME/data"
   grep -F ">> '$home_one/state/task-a.status'" "$brief" >/dev/null || fail "brief did not shell-quote FM_HOME state path"
+  grep -F 'Fast Gate means: run focused relevant checks' "$brief" >/dev/null || fail "local-only ship brief did not include Fast Gate"
+
+  FM_HOME="$home_one" "$ROOT/bin/fm-brief.sh" task-fast fallback-app >/dev/null 2>/dev/null || fail "default ship brief scaffold failed under FM_HOME"
+  brief="$home_one/data/task-fast/brief.md"
+  grep -F 'Fast Gate is the default for ordinary ship work' "$brief" >/dev/null || fail "default ship brief did not make Fast Gate default"
+  grep -F 'no-mistakes doctor' "$brief" >/dev/null && fail "default ship brief still forces no-mistakes setup"
 
   FM_HOME="$home_one" "$ROOT/bin/fm-brief.sh" task-b app --scout >/dev/null || fail "scout brief scaffold failed under FM_HOME"
   brief="$home_one/data/task-b/brief.md"
@@ -1057,7 +1063,7 @@ test_home_seed_refuses_symlinked_leaf_files() {
 }
 
 test_secondmate_spawn_records_home_meta() {
-  local home subhome subhome_abs fakebin log meta
+  local home subhome subhome_abs fakebin log meta out
   home="$TMP_ROOT/spawn home"
   subhome="$TMP_ROOT/spawn subhome"
   mkdir -p "$home/data/spawn-sub" "$home/state" "$subhome/data"
@@ -1070,14 +1076,19 @@ test_secondmate_spawn_records_home_meta() {
   fakebin=$(make_fake_tmux "$TMP_ROOT/spawn-fake")
   log="$TMP_ROOT/spawn-fake/tmux.log"
 
-  PATH="$fakebin:$PATH" FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/parent-config" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-fake/pane.txt" \
-    "$ROOT/bin/fm-spawn.sh" spawn-sub "$subhome" codex --secondmate >/dev/null \
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/parent-config" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-fake/pane.txt" \
+    "$ROOT/bin/fm-spawn.sh" spawn-sub "$subhome" codex --secondmate) \
     || fail "secondmate spawn failed"
 
   meta="$home/state/spawn-sub.meta"
+  grep -Fx 'backend=tmux-treehouse' "$meta" >/dev/null || fail "meta did not record legacy worker backend"
+  grep -Fx 'worker_id=firstmate:fm-spawn-sub' "$meta" >/dev/null || fail "meta did not record worker id"
+  grep -Fx "worker_project_path=$subhome_abs" "$meta" >/dev/null || fail "meta did not record worker project path"
+  grep -Fx 'environment=firstmate-home' "$meta" >/dev/null || fail "meta did not record worker environment"
   grep -Fx 'kind=secondmate' "$meta" >/dev/null || fail "meta did not record kind=secondmate"
   grep -Fx "home=$subhome_abs" "$meta" >/dev/null || fail "meta did not record subhome"
   grep -Fx 'projects=alpha, beta' "$meta" >/dev/null || fail "meta did not record project clone list"
+  printf '%s\n' "$out" | grep -F 'spawned spawn-sub backend=tmux-treehouse' >/dev/null || fail "spawn output did not include backend"
   grep -F 'treehouse get' "$log" >/dev/null && fail "secondmate spawn should not run project treehouse get"
   grep -F "FM_HOME='$subhome_abs'" "$log" >/dev/null || fail "secondmate launch did not set FM_HOME to subhome"
   grep -F 'FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$log" >/dev/null || fail "secondmate launch did not clear operational overrides"
