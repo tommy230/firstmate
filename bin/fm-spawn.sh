@@ -18,6 +18,7 @@
 #   not word-split unquoted $vars and silently breaks ad-hoc `for ... in $pairs` loops).
 #   Launch templates live in launch_template() below; placeholders replaced before launch:
 #     __BRIEF__    absolute path to data/<task-id>/brief.md
+#     __AGENT_NATIVE_MCP_CONFIG__ context-specific Codex MCP overrides
 #     __TURNEND__  absolute path to state/<task-id>.turn-ended (for harnesses whose
 #                  turn-end signal rides the launch command, e.g. codex -c notify=[...])
 #     __PIEXT__    absolute path to state/<task-id>.pi-ext.ts (pi turn-end extension,
@@ -121,9 +122,9 @@ launch_template() {
     claude) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions "$(cat __BRIEF__)"' ;;
     codex)
       if [ "$kind" = secondmate ]; then
-        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox "$(cat __BRIEF__)"'
+        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox __AGENT_NATIVE_MCP_CONFIG__"$(cat __BRIEF__)"'
       else
-        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(cat __BRIEF__)"'
+        printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox __AGENT_NATIVE_MCP_CONFIG__-c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(cat __BRIEF__)"'
       fi
       ;;
     opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}}'\'' opencode --prompt "$(cat __BRIEF__)"' ;;
@@ -200,6 +201,25 @@ path_is_ancestor_of() {
     "$ancestor"/*) return 0 ;;
   esac
   return 1
+}
+
+is_agent_native_project_path() {
+  local path=$1 name
+  name=$(basename "$path")
+  case "$name" in
+    agent-native|agent-native-*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+agent_native_mcp_config() {
+  local project_path=$1
+  if [ "$KIND" != secondmate ] && is_agent_native_project_path "$project_path"; then
+    return 0
+  fi
+  printf '%s' '-c mcp_servers.agent-native-web-production-e480f.enabled=false -c mcp_servers.agent-native-dispatch.enabled=false '
 }
 
 validate_firstmate_home_for_spawn() {
@@ -430,9 +450,11 @@ mkdir -p "$STATE"
 } > "$STATE/$ID.meta"
 
 sq_brief=$(shell_quote "$BRIEF")
+agent_native_mcp=$(agent_native_mcp_config "$PROJ_ABS")
 sq_turnend=$(shell_quote "$TURNEND")
 sq_piext=$(shell_quote "$STATE/$ID.pi-ext.ts")
 LAUNCH=${LAUNCH//__BRIEF__/$sq_brief}
+LAUNCH=${LAUNCH//__AGENT_NATIVE_MCP_CONFIG__/$agent_native_mcp}
 LAUNCH=${LAUNCH//__TURNEND__/$sq_turnend}
 LAUNCH=${LAUNCH//__PIEXT__/$sq_piext}
 if [ "$KIND" = secondmate ]; then
