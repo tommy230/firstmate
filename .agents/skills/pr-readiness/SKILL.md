@@ -14,23 +14,25 @@ missing research, internal transcript language, or weak validation.
 
 1. Refresh the base and PR facts.
    ```sh
-   git fetch origin main
    gh-axi pr view <number> --json number,title,author,mergeStateStatus,statusCheckRollup,changedFiles,additions,deletions,url
    gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '{mergeable,mergeable_state,rebaseable,head:{repo:.head.repo.full_name,ref:.head.ref,sha:.head.sha},base:{ref:.base.ref,sha:.base.sha}}'
+   BASE_REF="$(gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '.base.ref')"
+   BASE_REMOTE="origin/${BASE_REF}"
+   git fetch origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
    ```
    Use `gh-axi`, not raw `gh`, in this repo.
 
 2. Compare against current base, not the branch's old base.
    ```sh
-   git log --oneline --cherry-pick --right-only origin/main...HEAD
-   git diff --name-status origin/main...HEAD
-   git merge-tree "$(git merge-base origin/main HEAD)" origin/main HEAD
+   git log --oneline --cherry-pick --right-only "${BASE_REMOTE}"...HEAD
+   git diff --name-status "${BASE_REMOTE}"...HEAD
+   git merge-tree "$(git merge-base "${BASE_REMOTE}" HEAD)" "${BASE_REMOTE}" HEAD
    ```
    If the branch is dirty/conflicting, rebase or rebuild before asking anyone to
    review or merge it.
 
 3. Check overlap and supersession.
-   - Inspect recently merged commits on `origin/main`.
+   - Inspect recently merged commits on `${BASE_REMOTE}`.
    - Inspect adjacent open PRs that touch the same files or subsystem.
    - Decide whether the change is still needed, partly superseded, or should be
      split into smaller PRs.
@@ -82,7 +84,7 @@ For replacement PRs from a fork, also state what happened to the original PR:
 
 ```markdown
 This is a rebased/reworked replacement for #<old>. I kept <specific useful
-part>, dropped <superseded part>, and retested against current `main`.
+part>, dropped <superseded part>, and retested against current base.
 ```
 
 ## Stop conditions
