@@ -230,20 +230,20 @@ Tracked changes to firstmate itself, including `AGENTS.md`, `README.md`, `CONTRI
 When supervising live crewmates, keep long validation or build work in the background so watcher wakes can still be handled.
 Human-authored pull requests targeting `main` must be raised through `git push no-mistakes`; see `CONTRIBUTING.md` for the enforced contributor workflow.
 Local `.no-mistakes/` state and test evidence stay out of this repo; `.no-mistakes.yaml` keeps evidence in a temp directory instead.
-The current watcher reliability work keeps the one-shot process model and adds a durable queue plus singleton lock.
+The current watcher reliability work keeps the one-shot process model and adds a durable queue, singleton lock, and lossless check-output dedup.
 The presence-gated sub-supervisor (`bin/fm-supervise-daemon.sh`) provides proactive wake routing for walk-away supervision via the `/afk` skill; a blocking-waiter split remains a deferred follow-up phase.
 
 ```sh
 bash -n bin/*.sh                          # syntax-check the toolbelt
 shellcheck bin/*.sh tests/*.sh            # lint the toolbelt and behavior tests; CI enforces this
 for test_script in tests/*.test.sh; do "$test_script"; done   # behavior tests, matching CI
-tests/fm-wake-queue.test.sh               # durable wake queue, singleton behavior, sub-supervisor classifier, /afk presence-gating, border-aware composer, max-defer, and fm-send submit tests
+tests/fm-wake-queue.test.sh               # durable wake queue, lossless check dedup, singleton behavior, sub-supervisor classifier, /afk presence-gating, border-aware composer, max-defer, and fm-send submit tests
 tests/fm-composer-ghost.test.sh           # dim-ghost stripping, ghost-only composer detection, and escape-free peek tests
 tests/fm-afk-inject-e2e.test.sh           # private-socket end-to-end test of the afk injection path (partial-input deferral, swallowed-Enter retry)
 tests/fm-bootstrap.test.sh                # bootstrap dependency and feature-probe tests
 tests/fm-update.test.sh                   # fast-forward-only self-update, reread, nudge, dedup, and skip-safety tests
 tests/fm-secondmate.test.sh               # persistent secondmate routing, seeding, idle charter, backlog handoff, spawn, recovery, teardown, and FM_HOME tests
-tests/fm-teardown.test.sh                 # fm-teardown.sh safety and reminder checks: local-only fork-remote allow, truly-unpushed refuse, merged-to-main allow, no-mistakes regression, tasks-axi reminder, --force override
+tests/fm-teardown.test.sh                 # fm-teardown.sh safety and reminder checks: local-only fork-remote allow, truly-unpushed refuse, merged-to-main allow, no-mistakes regression, tasks-axi reminder, check-dedup cleanup, --force override
 [ "$(readlink CLAUDE.md)" = "AGENTS.md" ]
 [ "$(readlink .claude/skills)" = "../.agents/skills" ]
 FM_HEARTBEAT=2 FM_POLL=1 bin/fm-watch.sh  # watcher smoke test (prints "heartbeat")
