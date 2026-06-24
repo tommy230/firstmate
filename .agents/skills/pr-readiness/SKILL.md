@@ -12,13 +12,32 @@ missing research, internal transcript language, or weak validation.
 
 ## Required checks
 
-1. Refresh the base and PR facts.
+1. Refresh the base facts for the actual action.
+
+   For an existing PR, capture both the base branch and the base repository
+   before comparing or fetching:
    ```sh
    gh-axi pr view <number> --json number,title,author,mergeStateStatus,statusCheckRollup,changedFiles,additions,deletions,url
-   gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '{mergeable,mergeable_state,rebaseable,head:{repo:.head.repo.full_name,ref:.head.ref,sha:.head.sha},base:{ref:.base.ref,sha:.base.sha}}'
+   gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '{mergeable,mergeable_state,rebaseable,head:{repo:.head.repo.full_name,ref:.head.ref,sha:.head.sha},base:{repo:.base.repo.full_name,ref:.base.ref,sha:.base.sha}}'
+   BASE_REPO="$(gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '.base.repo.full_name')"
    BASE_REF="$(gh-axi api repos/<owner>/<repo>/pulls/<number> --jq '.base.ref')"
-   BASE_REMOTE="origin/${BASE_REF}"
-   git fetch origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+   BASE_REMOTE="refs/remotes/pr-base/${BASE_REF}"
+   git fetch "https://github.com/${BASE_REPO}.git" "refs/heads/${BASE_REF}:${BASE_REMOTE}"
+   ```
+
+   Before a PR exists, derive the intended base from the local branch and fetch
+   that base directly. For fork or replacement workflows, set
+   `TARGET_BASE_REPO` to the intended upstream repository rather than assuming
+   `origin`.
+   ```sh
+   BRANCH="$(git branch --show-current)"
+   BASE_REPO="${TARGET_BASE_REPO:-$(gh-axi repo view --json nameWithOwner --jq '.nameWithOwner')}"
+   BASE_REF="${TARGET_BASE_REF:-$(git config "branch.${BRANCH}.gh-merge-base" || true)}"
+   BASE_REF="${BASE_REF:-$(gh-axi repo view "${BASE_REPO}" --json defaultBranchRef --jq '.defaultBranchRef.name')}"
+   BASE_REMOTE="refs/remotes/pr-base/${BASE_REF}"
+   git fetch "https://github.com/${BASE_REPO}.git" "refs/heads/${BASE_REF}:${BASE_REMOTE}"
+   git status --short
+   git branch -vv
    ```
    Use `gh-axi`, not raw `gh`, in this repo.
 
