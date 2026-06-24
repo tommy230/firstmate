@@ -214,6 +214,9 @@ is_agent_native_project_path() {
   return 1
 }
 
+# Codex reads the captain's global MCP config by default. For firstmate-launched
+# non-agent-native project worktrees, override only the two agent-native MCP
+# servers that are noisy outside that repo family; do not rewrite global config.
 agent_native_mcp_config() {
   local project_path=$1
   if [ "$KIND" != secondmate ] && is_agent_native_project_path "$project_path"; then

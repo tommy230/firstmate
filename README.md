@@ -193,6 +193,7 @@ Set `FM_SECONDMATE_CHARTER` to seed from inline charter text when no filled char
 `FM_HOME` selects the operational home for one firstmate instance.
 When it is unset, the repo root is the home; when it is set, scripts still run from this repo's `bin/`, but `state/`, `data/`, `config/`, and `projects/` come from `$FM_HOME`.
 Harness support is a table in section 4: claude, codex, opencode, and pi are all empirically verified; new harnesses get verified through a supervised trial task before joining the table.
+Codex crewmate launches preserve the global Codex config but add per-launch MCP overrides outside repos named `agent-native` or `agent-native-*`, disabling only the two agent-native MCP servers that are noisy in unrelated projects.
 
 Runtime tuning via environment variables (defaults shown):
 
@@ -242,6 +243,7 @@ tests/fm-afk-inject-e2e.test.sh           # private-socket end-to-end test of th
 tests/fm-bootstrap.test.sh                # bootstrap dependency and feature-probe tests
 tests/fm-update.test.sh                   # fast-forward-only self-update, reread, nudge, dedup, and skip-safety tests
 tests/fm-secondmate.test.sh               # persistent secondmate routing, seeding, idle charter, backlog handoff, spawn, recovery, teardown, and FM_HOME tests
+tests/fm-spawn-codex.test.sh              # Codex launch template notify and contextual agent-native MCP override tests
 tests/fm-teardown.test.sh                 # fm-teardown.sh safety and reminder checks: local-only fork-remote allow, truly-unpushed refuse, merged-to-main allow, no-mistakes regression, tasks-axi reminder, --force override
 [ "$(readlink CLAUDE.md)" = "AGENTS.md" ]
 [ "$(readlink .claude/skills)" = "../.agents/skills" ]

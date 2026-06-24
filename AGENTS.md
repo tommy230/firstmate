@@ -180,6 +180,9 @@ That styled capture is internal to the boolean detector only; `fm-peek` and ever
 | Skill invocation | `$<skill>` (e.g. `$no-mistakes`); `/<skill>` is claude-only and codex rejects it as "Unrecognized command" |
 
 Directory trust dialog on first run per repo root ("Do you trust the contents of this directory?") - accept with Enter; the decision persists for the repo, so later worktrees of the same project skip it.
+Firstmate-launched codex ship and scout tasks keep the global Codex config intact but add per-launch MCP overrides for non-agent-native project worktrees: repos whose basename is not `agent-native` or `agent-native-*` disable only `agent-native-web-production-e480f` and `agent-native-dispatch`.
+Agent-native project worktrees leave those MCP servers enabled.
+Secondmate codex launches are treated as firstmate homes, not agent-native project worktrees, so they receive the same per-launch MCP disables and still do not install the parent turn-end notify hook.
 Resume after exit: `codex resume <session-id>` (printed on quit).
 
 ### opencode (VERIFIED 2026-06-11, v1.15.7-1.17.3)
@@ -390,7 +393,7 @@ bin/fm-spawn.sh <id1>=projects/<repo1> <id2>=projects/<repo2> [--scout]   # batc
 Dispatch several tasks in one call by passing `id=repo` pairs instead of a single `<id> <project>`; each pair is spawned through the same single-task path, a shared `--scout` applies to all, and the looping happens inside the script so you never hand-write a multi-task shell loop.
 If one pair fails, the rest still run and the batch exits non-zero.
 
-The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
+The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, applies contextual Codex MCP launch overrides for non-agent-native projects, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, and records `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
 For `kind=secondmate`, the same script launches in the registered or explicit firstmate home instead of running `treehouse get` for a project, records `home=` and `projects=`, and uses the charter brief as the launch prompt.
 
 For ship and scout tasks, the script creates the window (in your current tmux session, or a dedicated `firstmate` session when you are outside tmux), runs `treehouse get`, waits for the worktree subshell, installs the turn-end hook, records `state/<id>.meta`, and launches the agent with the brief.
