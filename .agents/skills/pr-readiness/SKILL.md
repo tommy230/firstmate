@@ -1,13 +1,19 @@
 ---
 name: pr-readiness
-description: Prepare, audit, or rewrite a pull request before it is opened, updated, commented on, or presented to a maintainer. Use when a user asks to create a PR, ask someone to merge a PR, replace an upstream PR from a fork, comment on a PR, publish branch work, or make sure a PR is maintainer-ready.
+description: >-
+  Prepare, audit, or rewrite a pull request before it is opened, updated,
+  commented on, or presented to a maintainer.
+  Use when a user asks to create a PR, ask someone to merge a PR, replace an
+  upstream PR from a fork, comment on a PR, publish branch work, or make sure a
+  PR is maintainer-ready.
 ---
 
 # pr-readiness
 
 Use this before any public PR action: opening a PR, updating a PR body, asking a
 maintainer to merge, commenting with a replacement branch, or presenting a PR as
-ready. The goal is to avoid wasting maintainer attention with stale branches,
+ready.
+The goal is to avoid wasting maintainer attention with stale branches,
 missing research, internal transcript language, or weak validation.
 
 ## Required checks
@@ -26,7 +32,8 @@ missing research, internal transcript language, or weak validation.
    ```
 
    Before a PR exists, derive the intended base from the local branch and fetch
-   that base directly. For fork or replacement workflows, set
+   that base directly.
+   For fork or replacement workflows, set
    `TARGET_BASE_REPO` to the intended upstream repository rather than assuming
    `origin`.
    ```sh
@@ -102,8 +109,8 @@ Compatibility, risk, or follow-up work if relevant.
 For replacement PRs from a fork, also state what happened to the original PR:
 
 ```markdown
-This is a rebased/reworked replacement for #<old>. I kept <specific useful
-part>, dropped <superseded part>, and retested against current base.
+This is a rebased/reworked replacement for #<old>.
+I kept <specific useful part>, dropped <superseded part>, and retested against current base.
 ```
 
 ## Stop conditions

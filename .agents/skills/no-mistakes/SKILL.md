@@ -132,11 +132,13 @@ Run the pipeline and decide on its findings as they come up:
    - `checks-passed` - the change is validated and CI is green, but the PR is
      not merged yet. **You are done driving the pipeline.** Do not wait for the
      merge: before telling the user or a maintainer that the PR is ready, run
-     the `pr-readiness` skill if this repo has it. It refreshes live GitHub/base
+     the `pr-readiness` skill if this repo has it.
+     It refreshes live GitHub/base
      facts, checks mergeability and overlap with current base, verifies public
      PR text, and blocks stale, conflicting, unverified, or overly broad PRs.
      If that audit passes, tell the user the PR is ready and ask them to review
-     and merge it (the PR link is in the `help` line). no-mistakes keeps
+     and merge it (the PR link is in the `help` line).
+     no-mistakes keeps
      monitoring the PR in the background, so a human can watch it in the TUI.
    - `passed` - the changes cleared the gate and the PR was merged or closed.
    - `failed` or `cancelled` - they did not; read the output and address it.
