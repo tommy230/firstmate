@@ -18,7 +18,8 @@
 #   not word-split unquoted $vars and silently breaks ad-hoc `for ... in $pairs` loops).
 #   Launch templates live in launch_template() below; placeholders replaced before launch:
 #     __BRIEF__    absolute path to data/<task-id>/brief.md
-#     __AGENT_NATIVE_MCP_CONFIG__ context-specific Codex MCP overrides
+#     __AGENT_NATIVE_MCP_CONFIG__ context-specific Codex MCP overrides; empty
+#                                 for agent-native project worktrees
 #     __TURNEND__  absolute path to state/<task-id>.turn-ended (for harnesses whose
 #                  turn-end signal rides the launch command, e.g. codex -c notify=[...])
 #     __PIEXT__    absolute path to state/<task-id>.pi-ext.ts (pi turn-end extension,

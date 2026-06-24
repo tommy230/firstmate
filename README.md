@@ -193,7 +193,7 @@ Set `FM_SECONDMATE_CHARTER` to seed from inline charter text when no filled char
 `FM_HOME` selects the operational home for one firstmate instance.
 When it is unset, the repo root is the home; when it is set, scripts still run from this repo's `bin/`, but `state/`, `data/`, `config/`, and `projects/` come from `$FM_HOME`.
 Harness support is a table in section 4: claude, codex, opencode, and pi are all empirically verified; new harnesses get verified through a supervised trial task before joining the table.
-Codex crewmate launches preserve the global Codex config but add per-launch MCP overrides outside repos named `agent-native` or `agent-native-*`, disabling only the two agent-native MCP servers that are noisy in unrelated projects.
+Codex launches preserve the global Codex config but add per-launch MCP overrides outside repos named `agent-native` or `agent-native-*`, and for secondmate homes, disabling only the two agent-native MCP servers that are noisy outside that repo family.
 
 Runtime tuning via environment variables (defaults shown):
 
