@@ -396,6 +396,7 @@ If one pair fails, the rest still run and the batch exits non-zero.
 
 The script resolves the harness (`fm-harness.sh crew`), owns the verified launch templates, resolves the project's delivery mode (`fm-project-mode.sh`) for ship/scout tasks, dispatches worker creation through the selected backend adapter, and records `backend=tmux-treehouse`, `worker_id=`, `worker_project_path=`, `environment=`, `harness=`, `kind=`, `mode=`, and `yolo=` in the task's meta for the currently implemented worker path; a non-flag third argument containing whitespace is treated as a raw launch command (only for verifying new adapters).
 The backend fields are the integration seam for Codex Desktop-native workers: future Desktop project-thread spawns should use `backend=codex-desktop` plus thread/project identifiers, while missing `backend=` in older metadata is interpreted as `tmux-treehouse` for compatibility during the migration.
+Downstream worker commands resolve through that backend metadata; until another real backend exists, non-`tmux-treehouse` metadata fails closed instead of being treated as a tmux window.
 Do not fake Codex Desktop project or thread creation in shell scripts; add that backend only when a real callable Desktop API exists.
 For `kind=secondmate`, the same script launches in the registered or explicit firstmate home instead of running `treehouse get` for a project, records `home=` and `projects=`, and uses the charter brief as the launch prompt.
 

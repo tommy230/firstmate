@@ -34,21 +34,24 @@ SECONDMATE_REG="$DATA/secondmates.md"
 SUB_HOME_MARKER=".fm-secondmate-home"
 # shellcheck source=bin/fm-tasks-axi-lib.sh
 . "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
+# shellcheck source=bin/fm-worker-lib.sh
+. "$SCRIPT_DIR/fm-worker-lib.sh"
 "$FM_ROOT/bin/fm-guard.sh" || true
 ID=$1
 FORCE=${2:-}
 
 META="$STATE/$ID.meta"
 [ -f "$META" ] || { echo "error: no meta for task $ID at $META" >&2; exit 1; }
-WT=$(grep '^worktree=' "$META" | cut -d= -f2-)
-T=$(grep '^window=' "$META" | cut -d= -f2-)
-PROJ=$(grep '^project=' "$META" | cut -d= -f2-)
-HOME_PATH=$(grep '^home=' "$META" | cut -d= -f2- || true)
-PR_URL=$(grep '^pr=' "$META" | tail -1 | cut -d= -f2- || true)
+fm_worker_require_tmux_treehouse "$ID" "$META" fm-teardown || exit 1
+WT=$(fm_worker_meta_value "$META" worktree)
+T=$(fm_worker_meta_value "$META" window)
+PROJ=$(fm_worker_meta_value "$META" project)
+HOME_PATH=$(fm_worker_meta_value "$META" home)
+PR_URL=$(fm_worker_meta_value "$META" pr)
 
-KIND=$(grep '^kind=' "$META" | cut -d= -f2- || true)
+KIND=$(fm_worker_meta_value "$META" kind)
 [ -n "$KIND" ] || KIND=ship
-MODE=$(grep '^mode=' "$META" | cut -d= -f2- || true)
+MODE=$(fm_worker_meta_value "$META" mode)
 [ -n "$MODE" ] || MODE=no-mistakes
 
 default_branch() {
@@ -333,6 +336,7 @@ validate_firstmate_home_children_removal() {
   for child_meta in "$sub_state"/*.meta; do
     [ -e "$child_meta" ] || continue
     child_id=$(basename "$child_meta" .meta)
+    fm_worker_require_tmux_treehouse "$child_id" "$child_meta" fm-teardown || return 1
     child_wt=$(meta_value "$child_meta" worktree)
     child_kind=$(meta_value "$child_meta" kind)
     [ -n "$child_kind" ] || child_kind=ship
@@ -355,6 +359,7 @@ cleanup_firstmate_home_children() {
   for child_meta in "$sub_state"/*.meta; do
     [ -e "$child_meta" ] || continue
     child_id=$(basename "$child_meta" .meta)
+    fm_worker_require_tmux_treehouse "$child_id" "$child_meta" fm-teardown || return 1
     child_t=$(meta_value "$child_meta" window)
     child_wt=$(meta_value "$child_meta" worktree)
     child_proj=$(meta_value "$child_meta" project)

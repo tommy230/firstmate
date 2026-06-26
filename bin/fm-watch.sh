@@ -18,6 +18,8 @@ mkdir -p "$STATE"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-worker-lib.sh
+. "$SCRIPT_DIR/fm-worker-lib.sh"
 
 WATCH_LOCK="$STATE/.watch.lock"
 WATCHER_STALE_GRACE=${FM_WATCHER_STALE_GRACE:-${FM_GUARD_GRACE:-300}}
@@ -77,7 +79,7 @@ window_kind() {
   local w=$1 meta mw kind
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
-    mw=$(grep '^window=' "$meta" | cut -d= -f2- || true)
+    mw=$(fm_worker_meta_value "$meta" window)
     [ "$mw" = "$w" ] || continue
     kind=$(grep '^kind=' "$meta" | cut -d= -f2- || true)
     [ -n "$kind" ] || kind=ship
@@ -88,16 +90,41 @@ window_kind() {
 }
 
 recorded_windows() {
-  local meta w seen=
+  local meta w seen='' backend id
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
-    w=$(grep '^window=' "$meta" | cut -d= -f2- || true)
+    backend=$(fm_worker_backend_for_meta "$meta")
+    case "$backend" in
+      tmux-treehouse) ;;
+      *)
+        id=$(basename "$meta" .meta)
+        echo "error: task $id uses backend=$backend; fm-watch currently supports only tmux-treehouse workers" >&2
+        continue
+        ;;
+    esac
+    w=$(fm_worker_meta_value "$meta" window)
     [ -n "$w" ] || continue
     case "$seen" in
       *"|$w|"*) continue ;;
     esac
     seen="$seen|$w|"
     printf '%s\n' "$w"
+  done
+}
+
+validate_recorded_worker_backends() {
+  local meta backend id
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    backend=$(fm_worker_backend_for_meta "$meta")
+    case "$backend" in
+      tmux-treehouse) ;;
+      *)
+        id=$(basename "$meta" .meta)
+        echo "error: task $id uses backend=$backend; fm-watch currently supports only tmux-treehouse workers" >&2
+        return 1
+        ;;
+    esac
   done
 }
 
@@ -160,6 +187,7 @@ while :; do
   # Liveness beacon for fm-guard.sh: a fresh mtime here means a watcher is
   # alive. Supervision scripts warn when this goes stale with tasks in flight.
   touch "$STATE/.last-watcher-beat"
+  validate_recorded_worker_backends || exit 1
 
   # Slow per-task checks (firstmate writes these, e.g. a merged-PR poll).
   # Time-based via .last-check mtime so the cadence survives watcher restarts.

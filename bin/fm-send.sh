@@ -21,25 +21,13 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
 # shellcheck source=bin/fm-tmux-lib.sh
 . "$SCRIPT_DIR/fm-tmux-lib.sh"
+# shellcheck source=bin/fm-worker-lib.sh
+. "$SCRIPT_DIR/fm-worker-lib.sh"
 
 "$SCRIPT_DIR/fm-guard.sh" || true
 
 resolve() {
-  case "$1" in
-    *:*) echo "$1" ;;
-    fm-*)
-      meta="$STATE/${1#fm-}.meta"
-      if [ ! -f "$meta" ]; then
-        echo "error: no metadata for $1 in $STATE; pass session:window to target a window outside this firstmate home" >&2
-        exit 1
-      fi
-      window=$(grep '^window=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
-      [ -n "$window" ] || { echo "error: no window recorded in $meta" >&2; exit 1; }
-      echo "$window"
-      ;;
-    *) tmux list-windows -a -F '#{session_name}:#{window_name}' | grep -m1 ":$1\$" \
-         || { echo "error: no window named $1" >&2; exit 1; } ;;
-  esac
+  fm_worker_resolve_tmux_target "$1" "$STATE" fm-send
 }
 
 T=$(resolve "$1")

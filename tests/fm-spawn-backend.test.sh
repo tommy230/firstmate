@@ -106,8 +106,10 @@ test_ship_spawn_records_backend_metadata() {
     || fail "spawn did not create tmux window in project"
   grep -F 'send-keys -t firstmate:fm-backend-ship treehouse get Enter' "$log" >/dev/null \
     || fail "spawn did not keep treehouse get launch path"
-  grep -F 'codex --dangerously-bypass-approvals-and-sandbox -c "notify=' "$log" >/dev/null \
+  grep -F 'codex --dangerously-bypass-approvals-and-sandbox' "$log" >/dev/null \
     || fail "spawn did not send codex launch command"
+  grep -F ' -c "notify=[' "$log" >/dev/null \
+    || fail "spawn did not keep codex turn-end notify command"
   pass "ship spawn records explicit tmux-treehouse backend metadata"
 }
 

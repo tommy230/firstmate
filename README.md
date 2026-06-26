@@ -122,6 +122,7 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
   Its injection path shares `bin/fm-tmux-lib.sh` with `fm-send.sh`, so dim-ghost-aware and border-aware composer detection plus verified submit retry stay consistent; stalled escalation delivery raises `state/.subsuper-inject-wedged` after `FM_MAX_DEFER_SECS` instead of silently deferring forever.
 - **Worker backend is explicit** - current workers use the implemented `tmux-treehouse` backend: a tmux window plus a treehouse worktree, recorded in `state/<id>.meta`.
   That metadata is the migration seam for Codex Desktop project-thread workers; older metadata without `backend=` is interpreted as `tmux-treehouse` for compatibility during the migration.
+  Worker-facing commands resolve through that backend metadata, so unsupported future backends fail closed instead of being treated as tmux windows.
 - **Worktrees, not branches in your checkout** - crewmates never touch your clone; treehouse pools clean worktrees so parallel tasks on one repo cannot collide.
 - **Two task shapes** - ship tasks change projects and ship by project mode (`no-mistakes`, `direct-PR`, or `local-only`); ordinary ship work uses Fast Gate by default: isolated worktree, focused checks, diff review, commit, and risk summary.
   Full no-mistakes is reserved for high-risk, release/deploy, security-sensitive, dependency, broad-refactor, multi-subsystem, or explicitly requested work.
