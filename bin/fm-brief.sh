@@ -21,7 +21,7 @@
 # controls PR/local merge mechanics (data/projects.md via fm-project-mode.sh;
 # see AGENTS.md sections 6-7):
 #   no-mistakes  Fast Gate by default; full no-mistakes only for high assurance
-#   direct-PR    Fast Gate -> push + open PR via gh-axi -> captain merge
+#   direct-PR    Fast Gate -> guarded PR only with explicit upstream approval
 #   local-only   implement on branch, stop and report "ready in branch" (no push/PR);
 #                firstmate reviews, captain approves, firstmate merges to local main
 # Scout tasks ignore mode - their deliverable is a report, not a merge.
@@ -154,22 +154,24 @@ fi
 
 # Ship task: shape Setup / Rule 1 / Definition of done by the project's delivery mode.
 # yolo does not affect the brief (it governs firstmate's approval behaviour), so discard it.
-read -r MODE _ <<EOF
-$("$FM_ROOT/bin/fm-project-mode.sh" "$REPO")
-EOF
+mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$REPO")
+MODE=${mode_line%% *}
 
 case "$MODE" in
   direct-PR)
     SETUP2=""
     RULE1='1. Never push to the default branch (push only your `fm/'"$ID"'` branch). Never merge a PR.'
-    DOD=$(cat <<EOF
-# Definition of done
-This project ships **direct-PR**: you raise the PR yourself after Fast Gate, without the full no-mistakes pipeline.
-Fast Gate means: run focused relevant checks for the files/behavior you changed; run lint/typecheck only when relevant and cheap; review your diff; commit the finished change; write a short risk summary with checks run and checks skipped.
-When it is implemented, checked, diff-reviewed, and committed, push your branch and open a PR with \`gh-axi\`, then append \`done: PR {url}; checks {summary}; risk {low|medium|high}\` to the status file and stop.
-Do NOT run /no-mistakes. The captain reviews and merges the PR; firstmate relays it.
-EOF
-)
+    DOD=$(printf '%s\n' \
+      '# Definition of done' \
+      'This project ships **direct-PR**: you raise the PR yourself after Fast Gate, without the full no-mistakes pipeline.' \
+      'Fast Gate means: run focused relevant checks for the files/behavior you changed; run lint/typecheck only when relevant and cheap; review your diff; commit the finished change; write a short risk summary with checks run and checks skipped.' \
+      'Before any PR creation, run the pr-readiness audit for the intended target and resolve any stale base, conflict, missing-check, internal-language, or scope issue it finds.' \
+      "When it is implemented, checked, diff-reviewed, pr-readiness-audited, and committed, open a GitHub PR only through $FM_ROOT/bin/fm-pr-create.sh, never through gh-axi pr create directly." \
+      'fm-pr-create.sh refuses by default; it requires explicit upstream approval in FM_ALLOW_UPSTREAM_PR=1 and FM_UPSTREAM_PR_TARGET=owner/repo, with the same target passed via --repo, -R, or GH_REPO.' \
+      'If those approval values are absent or the guard refuses, do NOT push, do NOT open a PR, and do NOT merge.' \
+      "Instead append done: ready in branch fm/$ID; checks {summary}; risk {low|medium|high} to the status file and stop for firstmate's local-main review." \
+      'If the guard succeeds and opens the PR, append done: PR {url}; checks {summary}; risk {low|medium|high} to the status file and stop.' \
+      'Do NOT run /no-mistakes. The captain reviews and merges the PR; firstmate relays it.')
     ;;
   local-only)
     SETUP2=""

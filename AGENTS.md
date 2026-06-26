@@ -313,7 +313,7 @@ Do not eagerly backfill every project.
 **Delivery mode (choose at add).** `<mode>` is how a finished change reaches `main`, picked per project when you add it and recorded in the registry line (`fm-project-mode.sh` parses it; `fm-spawn` records it into each task's meta). Delivery mode is separate from validation gate: Fast Gate is the default for ordinary ship work; full no-mistakes is reserved for high-risk, release/deploy, security-sensitive, dependency, broad-refactor, multi-subsystem, or explicitly requested work.
 
 - `no-mistakes` (default; `[...]` may be omitted) - PR-capable mode; ordinary work starts with Fast Gate, and full no-mistakes remains the high-assurance escalation/fallback.
-- `direct-PR` - Fast Gate, run `pr-readiness`, push + open a PR via `gh-axi`, no full pipeline -> captain merge.
+- `direct-PR` - Fast Gate, run `pr-readiness`, and open a GitHub PR only through `bin/fm-pr-create.sh` when the captain explicitly approved the upstream target; otherwise stop at local branch review.
 - `local-only` - Fast Gate on a local branch, no remote, no PR; firstmate reviews the diff, the captain approves, firstmate merges to local `main` (section 7).
 
 Orthogonal to mode is an optional `+yolo` flag (`[direct-PR +yolo]`), default off and **not recommended**: with `yolo` on, firstmate makes the approval decisions itself instead of asking the captain (section 7). When the captain adds a project without saying, default to `no-mistakes` with yolo off; only set a faster mode or `+yolo` on the captain's explicit say-so.
@@ -418,8 +418,11 @@ A ship task's path from `done` to landed on `main` is set by the project's `mode
 
 - **no-mistakes** - Fast Gate for ordinary work; escalate to full no-mistakes when risk, repo policy, or captain instruction requires it.
 - **direct-PR** - no full pipeline.
-  The crewmate runs the `pr-readiness` audit, then pushes and opens the PR itself (its brief says so) and reports `done: PR <url>`.
-  Fast Gate happens before push; then go straight to PR ready (run the same readiness audit on the opened PR if facts may have changed, then `fm-pr-check`, then relay the PR).
+  The crewmate runs the `pr-readiness` audit, then opens any approved GitHub PR through `bin/fm-pr-create.sh` (its brief says so) and reports `done: PR <url>`.
+  `fm-pr-create.sh` refuses GitHub PR creation by default; an upstream PR requires the captain's explicit target approval encoded as `FM_ALLOW_UPSTREAM_PR=1` and `FM_UPSTREAM_PR_TARGET=<owner/repo>`, with the same target passed via `--repo`, `-R`, or `GH_REPO`.
+  If upstream PR approval is absent or the guard refuses, the crewmate must not push or open a PR; it reports `done: ready in branch fm/<id>` for firstmate to review with `bin/fm-review-diff.sh <id>` against local/current main and relay as a local review result.
+  Fast Gate happens before push/PR, or before local review when PR creation is not approved.
+  With an opened PR, go straight to PR ready (run the same readiness audit on the opened PR if facts may have changed, then `fm-pr-check`, then relay the PR).
   Teardown uses the normal pushed-branch check.
 - **local-only** - no remote, no PR.
   The crewmate stops at `done: ready in branch fm/<id>`.
@@ -456,6 +459,7 @@ Use chat for yes/no decisions; use lavish-axi when there are multiple findings o
 For PR-based ship tasks, the ready signal depends on validation and mode: full no-mistakes reports `done: PR <url> checks green` after CI is green, while Fast Gate work reports a committed branch or PR with checks and risk summary.
 Before telling the captain the PR is ready, asking a maintainer to review or merge, updating PR public text, or commenting with a replacement branch, use the `pr-readiness` skill to audit live GitHub/base facts, mergeability, current-base overlap, validation, and maintainer-facing text.
 If that audit finds stale base, conflicts, missing checks, internal transcript language, or broad unrelated scope, stop and resolve it before any public PR action.
+Create GitHub PRs only through `bin/fm-pr-create.sh`; do not call `gh-axi pr create` directly.
 Run `bin/fm-pr-check.sh <id> <PR url>` - it records `pr=` in the task's meta and arms the watcher's merge poll.
 Tell the captain: the PR's full URL (always the complete `https://...` link, never a bare `#number` - the captain's terminal makes a full URL clickable), a one-paragraph summary, and, for `no-mistakes`, the risk level it emitted.
 (The check contract, for any custom `state/<id>.check.sh` you write yourself: print one line only when firstmate should wake, print nothing otherwise, and finish before `FM_CHECK_TIMEOUT`.)
@@ -701,7 +705,7 @@ Secondmates inherit this automatically: each secondmate home carries the same `A
 ## 11. Crewmate briefs
 
 Scaffold with `bin/fm-brief.sh <id> <repo-name>` - it writes `data/<id>/brief.md` with the standard contract (branch setup, status-reporting protocol, push/merge rules, definition of done) and all paths filled in.
-For a ship task, Fast Gate is the default definition of done unless the project or task escalates to full no-mistakes: focused relevant checks, cheap relevant lint/typecheck, diff review, commit, and risk summary. Delivery mode still decides PR/local merge mechanics: `direct-PR` has the crewmate run `pr-readiness` before pushing and opening the PR itself, `local-only` has it stop at "ready in branch" for firstmate to review and merge locally, and `no-mistakes` remains the high-assurance escalation/fallback.
+For a ship task, Fast Gate is the default definition of done unless the project or task escalates to full no-mistakes: focused relevant checks, cheap relevant lint/typecheck, diff review, commit, and risk summary. Delivery mode still decides PR/local merge mechanics: `direct-PR` has the crewmate run `pr-readiness` and then open a PR only through `bin/fm-pr-create.sh` when explicit upstream approval is encoded, otherwise it stops at "ready in branch" for firstmate's local review; `local-only` has it stop at "ready in branch" for firstmate to review and merge locally; and `no-mistakes` remains the high-assurance escalation/fallback.
 The scaffold reads the mode via `fm-project-mode.sh`, so you do not pass it.
 Ship briefs also include the project-memory contract: run `bin/fm-ensure-agents-md.sh` when the project already has agent-memory files or when the task produced durable project-intrinsic knowledge, then record proportionate learnings in `AGENTS.md`.
 For scout tasks add `--scout`: the scaffold swaps the definition of done for the report contract (findings to `data/<id>/report.md`, no branch, no push, no PR) and declares the worktree scratch; scout is mode-agnostic.

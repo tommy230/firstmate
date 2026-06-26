@@ -15,6 +15,11 @@ maintainer to merge, commenting with a replacement branch, or presenting a PR as
 ready.
 The goal is to avoid wasting maintainer attention with stale branches,
 missing research, internal transcript language, or weak validation.
+When opening a GitHub PR from firstmate workflows, use `bin/fm-pr-create.sh`
+instead of `gh-axi pr create` directly.
+If that wrapper refuses because no upstream target was explicitly approved, stop
+and report the branch as ready for firstmate's local-main review instead of
+creating a PR.
 
 ## Required checks
 

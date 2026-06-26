@@ -10,7 +10,7 @@
 #
 # mode = how a finished change reaches main:
 #   no-mistakes  PR-capable legacy default; full pipeline only for high assurance
-#   direct-PR    push + PR via gh-axi, no full pipeline -> captain merge
+#   direct-PR    guarded PR path only with explicit upstream approval; otherwise local review
 #   local-only   local branch, no remote/PR -> firstmate review -> captain approve -> local merge
 # yolo (orthogonal) = when on, firstmate makes approval decisions itself (PR merges,
 #   ask-user findings, local-only merge approval) without checking the captain - except

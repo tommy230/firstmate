@@ -51,6 +51,10 @@ the same way once the work is committed on a feature branch.
   validates committed history, not your uncommitted working tree.
 - You must be on a **feature branch**, not the repository's default branch.
 - The repository must already be initialized with `no-mistakes init`.
+- If repo-local or user instructions say upstream PR creation is not approved
+  by default, do not start a no-mistakes run that can push/open an upstream PR
+  unless the user has explicitly approved that upstream target.
+  Use the local Fast Gate path instead, or ask for explicit approval.
 
 If any of these is not met, `axi run` returns an `error:` with the exact command
 to fix it - read it and act on it (commit your work, or create a branch). If the

@@ -139,7 +139,7 @@ firstmate works from any terminal - outside tmux, crewmates land in a detached `
   Idle secondmate panes are healthy; teardown is explicit and refuses while the secondmate home has in-flight work unless the captain has approved discard with `--force`.
 - **Project modes are explicit** - `data/projects.md` records each work repo's delivery mode and optional `+yolo` autonomy flag.
   Tooling repos are not ordinary work destinations unless the task edits that tool repo.
-  `no-mistakes` remains the high-assurance escalation/fallback, `direct-PR` projects run the PR-readiness audit before opening PRs without the full pipeline, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
+  `no-mistakes` remains the high-assurance escalation/fallback, `direct-PR` projects run the PR-readiness audit before guarded PR creation only when an upstream target is explicitly approved, and `local-only` projects stay local until firstmate performs an approved fast-forward merge.
 - **Project memory belongs to projects** - durable project-intrinsic agent knowledge lives in each project's committed `AGENTS.md`, with `CLAUDE.md` as a symlink.
   Ship briefs prompt crewmates to create or update those files through the normal delivery path; `data/projects.md` stays a thin private registry.
 - **Local clones stay fresh** - bootstrap and PR-based teardown refresh remote-backed project clones with clean default-branch fast-forwards when the clone is on the default branch and has no local work, and prune local branches whose remote is gone and that no worktree still needs.
@@ -166,6 +166,7 @@ The first mate drives these; you rarely need to, but they work by hand too.
 | `fm-project-mode.sh`     | Resolve a project's delivery mode and `+yolo` flag from `data/projects.md`                                          |
 | `fm-merge-local.sh`      | Fast-forward a `local-only` project's local default branch after approval                                           |
 | `fm-review-diff.sh`      | Review a crewmate branch against the authoritative base, with optional `--stat` output                              |
+| `fm-pr-create.sh`        | Guarded GitHub PR creation; refuses by default unless an explicit upstream target approval is encoded               |
 | `fm-watch.sh`            | Singleton-safe one-shot watcher; blocks until supervision work is due, queues it durably, then exits with one reason line |
 | `fm-supervise-daemon.sh` | Presence-gated sub-supervisor for walk-away (`/afk`) supervision: wraps `fm-watch.sh`, self-handles routine wakes in bash, and escalates only captain-relevant events as one verified, batched, single-line digest prefixed with a sentinel marker |
 | `fm-wake-drain.sh`       | Atomically drain queued watcher wakes before handling supervision work                                              |
@@ -236,7 +237,7 @@ Human-authored pull requests targeting `main` must be raised through `git push n
 Local `.no-mistakes/` state and test evidence stay out of this repo; `.no-mistakes.yaml` keeps evidence in a temp directory instead.
 The current watcher reliability work keeps the one-shot process model and adds a durable queue plus singleton lock.
 The presence-gated sub-supervisor (`bin/fm-supervise-daemon.sh`) provides proactive wake routing for walk-away supervision via the `/afk` skill; a blocking-waiter split remains a deferred follow-up phase.
-The `pr-readiness` skill audits live GitHub/base facts, current-base overlap, validation, and public PR text before firstmate opens, updates, comments on, presents, or asks maintainers to merge a PR.
+The `pr-readiness` skill audits live GitHub/base facts, current-base overlap, validation, and public PR text before firstmate opens, updates, comments on, presents, or asks maintainers to merge a PR; new PR creation goes through `bin/fm-pr-create.sh`.
 
 ```sh
 bash -n bin/*.sh                          # syntax-check the toolbelt
