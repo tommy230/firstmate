@@ -23,9 +23,12 @@
 #     __PIEXT__    absolute path to state/<task-id>.pi-ext.ts (pi turn-end extension,
 #                  written by this script; outside the worktree to avoid pi's trust gate)
 # Per-harness turn-end hooks are installed automatically; some live outside the worktree.
-# On success prints: spawned <id> harness=<name> kind=<ship|scout|secondmate> mode=<mode> yolo=<on|off> window=<session:window> worktree=<path>
+# On success prints: spawned <id> backend=<backend> harness=<name> kind=<ship|scout|secondmate> mode=<mode> yolo=<on|off> window=<session:window> worktree=<path>
 # mode/yolo are resolved per-project from data/projects.md for ship/scout tasks;
 # secondmate spawns record mode=secondmate, yolo=off, home=, and projects=.
+# backend=tmux-treehouse is the current implemented worker backend. Future Codex
+# Desktop workers should add their own backend value only when a real project/thread
+# API exists, without removing these fields.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -109,7 +112,16 @@ launch_template() {
   local harness=$1 kind=${2:-ship}
   # shellcheck disable=SC2016  # single quotes are deliberate: $(cat ...) expands in the crewmate pane, not here
   case "$harness" in
-    claude) printf '%s' 'claude --dangerously-skip-permissions "$(cat __BRIEF__)"' ;;
+    # CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false disables claude's interactive
+    # predicted-next-prompt ghost text, which renders as dim/faint text inside an
+    # otherwise-empty composer and would otherwise read like real typed input when
+    # firstmate captures the pane (see AGENTS.md section 4). It is a per-launch env
+    # prefix scoped to this firstmate-launched agent; it never touches the captain's
+    # global config. The CLI's --prompt-suggestions flag is print/SDK-mode only and
+    # does NOT suppress the interactive ghost text (verified empirically), so the env
+    # var is the correct control. The dim-aware composer reader in fm-tmux-lib.sh is
+    # the defense-in-depth backstop for any pane this flag cannot reach.
+    claude) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude --dangerously-skip-permissions "$(cat __BRIEF__)"' ;;
     codex)
       if [ "$kind" = secondmate ]; then
         printf '%s' 'codex --dangerously-bypass-approvals-and-sandbox -c mcp_servers.agent-native-web-production-e480f.enabled=false -c mcp_servers.agent-native-dispatch.enabled=false "$(cat __BRIEF__)"'
@@ -126,6 +138,110 @@ launch_template() {
       fi
       ;;
     *) return 1 ;;
+  esac
+}
+
+current_worker_backend() {
+  printf '%s\n' "${FM_WORKER_BACKEND:-tmux-treehouse}"
+}
+
+require_known_worker_backend() {
+  local backend=$1
+  case "$backend" in
+    tmux-treehouse|codex-desktop) ;;
+    *)
+      echo "error: unsupported worker backend '$backend'" >&2
+      return 1
+      ;;
+  esac
+}
+
+codex_desktop_backend_unavailable() {
+  echo "error: worker backend codex-desktop is not implemented; no callable Codex Desktop project/thread API exists yet" >&2
+  return 1
+}
+
+worker_environment() {
+  if [ "$KIND" = secondmate ]; then
+    printf '%s\n' firstmate-home
+  else
+    printf '%s\n' treehouse
+  fi
+}
+
+worker_id() {
+  printf '%s\n' "$T"
+}
+
+worker_project_path() {
+  printf '%s\n' "$PROJ_ABS"
+}
+
+write_spawn_meta() {
+  local environment
+  environment=$(worker_environment)
+  mkdir -p "$STATE"
+  {
+    echo "backend=$BACKEND"
+    echo "worker_id=$(worker_id)"
+    echo "worker_project_path=$(worker_project_path)"
+    echo "environment=$environment"
+    echo "window=$T"
+    echo "worktree=$WT"
+    echo "project=$PROJ_ABS"
+    echo "harness=$HARNESS"
+    echo "kind=$KIND"
+    echo "mode=$MODE"
+    echo "yolo=$YOLO"
+    if [ "$KIND" = secondmate ]; then
+      echo "home=$PROJ_ABS"
+      echo "projects=$SECONDMATE_PROJECTS"
+    fi
+  } > "$STATE/$ID.meta"
+}
+
+start_tmux_treehouse_worker() {
+  local p
+  # Same session when firstmate already runs inside tmux; dedicated session otherwise.
+  if [ -n "${TMUX:-}" ]; then
+    SES=$(tmux display-message -p '#S')
+  else
+    tmux has-session -t firstmate 2>/dev/null || tmux new-session -d -s firstmate
+    SES=firstmate
+  fi
+
+  W="fm-$ID"
+  T="$SES:$W"
+  if tmux list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
+    echo "error: window $T already exists" >&2
+    return 1
+  fi
+
+  tmux new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
+  if [ "$KIND" != secondmate ]; then
+    tmux send-keys -t "$T" 'treehouse get' Enter
+
+    # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
+    for _ in $(seq 1 60); do
+      p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
+      if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
+        WT="$p"
+        break
+      fi
+      sleep 1
+    done
+    if [ -z "$WT" ]; then
+      echo "error: treehouse get did not enter a worktree within 60s; inspect window $T" >&2
+      return 1
+    fi
+  fi
+}
+
+start_worker_backend() {
+  case "$BACKEND" in
+    tmux-treehouse) start_tmux_treehouse_worker ;;
+    codex-desktop) codex_desktop_backend_unavailable ;;
+    *) echo "error: unsupported worker backend '$BACKEND'" >&2; return 1 ;;
   esac
 }
 
@@ -146,6 +262,9 @@ case "$ARG3" in
     LAUNCH=$(launch_template "$HARNESS" "$KIND") || { echo "error: unknown harness '$HARNESS'; pass a raw launch command to use an unverified adapter" >&2; exit 1; }
     ;;
 esac
+
+BACKEND=$(current_worker_backend)
+require_known_worker_backend "$BACKEND" || exit 1
 
 secondmate_registry_value() {
   local id=$1 key=$2 reg line value
@@ -303,39 +422,7 @@ else
 fi
 [ -f "$BRIEF" ] || { echo "error: no brief at $BRIEF" >&2; exit 1; }
 
-# Same session when firstmate already runs inside tmux; dedicated session otherwise.
-if [ -n "${TMUX:-}" ]; then
-  SES=$(tmux display-message -p '#S')
-else
-  tmux has-session -t firstmate 2>/dev/null || tmux new-session -d -s firstmate
-  SES=firstmate
-fi
-
-W="fm-$ID"
-T="$SES:$W"
-if tmux list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
-  echo "error: window $T already exists" >&2
-  exit 1
-fi
-
-tmux new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
-if [ "$KIND" != secondmate ]; then
-  tmux send-keys -t "$T" 'treehouse get' Enter
-
-  # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
-  for _ in $(seq 1 60); do
-    p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
-    if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
-      WT="$p"
-      break
-    fi
-    sleep 1
-  done
-  if [ -z "$WT" ]; then
-    echo "error: treehouse get did not enter a worktree within 60s; inspect window $T" >&2
-    exit 1
-  fi
-fi
+start_worker_backend || exit 1
 
 # Per-harness turn-end hook: a file that touches state/<id>.turn-ended when the
 # agent finishes a turn. Worktree-resident hooks are kept out of git's view so
@@ -348,7 +435,11 @@ exclude_path() {
   mkdir -p "$(dirname "$EXCL")"
   grep -qxF "$rel" "$EXCL" 2>/dev/null || echo "$rel" >> "$EXCL"
 }
-if [ "$KIND" != secondmate ]; then
+install_tmux_treehouse_turn_end_hook() {
+  if [ "$KIND" = secondmate ]; then
+    return 0
+  fi
+
   case "$HARNESS" in
     claude*)
       mkdir -p "$WT/.claude"
@@ -387,7 +478,16 @@ EOF
       # codex: turn-end rides the launch command via -c notify=[...] and __TURNEND__.
       ;;
   esac
-fi
+}
+
+install_worker_turn_end_hook() {
+  case "$BACKEND" in
+    tmux-treehouse) install_tmux_treehouse_turn_end_hook ;;
+    codex-desktop) codex_desktop_backend_unavailable ;;
+    *) echo "error: unsupported worker backend '$BACKEND'" >&2; return 1 ;;
+  esac
+}
+install_worker_turn_end_hook || exit 1
 
 # Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; AGENTS.md sections 6-7).
 # Recorded in meta so fm-teardown's safety check and the validate/merge stages can
@@ -405,20 +505,7 @@ $("$FM_ROOT/bin/fm-project-mode.sh" "$PROJ_NAME")
 EOF
 fi
 
-mkdir -p "$STATE"
-{
-  echo "window=$T"
-  echo "worktree=$WT"
-  echo "project=$PROJ_ABS"
-  echo "harness=$HARNESS"
-  echo "kind=$KIND"
-  echo "mode=$MODE"
-  echo "yolo=$YOLO"
-  if [ "$KIND" = secondmate ]; then
-    echo "home=$PROJ_ABS"
-    echo "projects=$SECONDMATE_PROJECTS"
-  fi
-} > "$STATE/$ID.meta"
+write_spawn_meta
 
 sq_brief=$(shell_quote "$BRIEF")
 sq_turnend=$(shell_quote "$TURNEND")
@@ -434,4 +521,4 @@ tmux send-keys -t "$T" -l "$LAUNCH"
 sleep 0.3
 tmux send-keys -t "$T" Enter
 
-echo "spawned $ID harness=$HARNESS kind=$KIND mode=$MODE yolo=$YOLO window=$T worktree=$WT"
+echo "spawned $ID backend=$BACKEND harness=$HARNESS kind=$KIND mode=$MODE yolo=$YOLO window=$T worktree=$WT"

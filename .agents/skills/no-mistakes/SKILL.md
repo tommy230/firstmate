@@ -51,6 +51,10 @@ the same way once the work is committed on a feature branch.
   validates committed history, not your uncommitted working tree.
 - You must be on a **feature branch**, not the repository's default branch.
 - The repository must already be initialized with `no-mistakes init`.
+- If repo-local or user instructions say upstream PR creation is not approved
+  by default, do not start a no-mistakes run that can push/open an upstream PR
+  unless the user has explicitly approved that upstream target.
+  Use the local Fast Gate path instead, or ask for explicit approval.
 
 If any of these is not met, `axi run` returns an `error:` with the exact command
 to fix it - read it and act on it (commit your work, or create a branch). If the
@@ -131,9 +135,15 @@ Run the pipeline and decide on its findings as they come up:
    outcomes are:
    - `checks-passed` - the change is validated and CI is green, but the PR is
      not merged yet. **You are done driving the pipeline.** Do not wait for the
-     merge: tell the user the PR is ready and ask them to review and merge it
-     (the PR link is in the `help` line). no-mistakes keeps monitoring the PR
-     in the background, so a human can watch it in the TUI.
+     merge: before telling the user or a maintainer that the PR is ready, run
+     the `pr-readiness` skill if this repo has it.
+     It refreshes live GitHub/base
+     facts, checks mergeability and overlap with current base, verifies public
+     PR text, and blocks stale, conflicting, unverified, or overly broad PRs.
+     If that audit passes, tell the user the PR is ready and ask them to review
+     and merge it (the PR link is in the `help` line).
+     no-mistakes keeps
+     monitoring the PR in the background, so a human can watch it in the TUI.
    - `passed` - the changes cleared the gate and the PR was merged or closed.
    - `failed` or `cancelled` - they did not; read the output and address it.
      Fix whatever the output points at (a failing test, a lint error, a finding

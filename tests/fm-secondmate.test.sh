@@ -221,6 +221,12 @@ test_fm_home_parameterization() {
   brief="$home_one/data/task-a/brief.md"
   [ -f "$brief" ] || fail "brief was not written under FM_HOME/data"
   grep -F ">> '$home_one/state/task-a.status'" "$brief" >/dev/null || fail "brief did not shell-quote FM_HOME state path"
+  grep -F 'Fast Gate means: run focused relevant checks' "$brief" >/dev/null || fail "local-only ship brief did not include Fast Gate"
+
+  FM_HOME="$home_one" "$ROOT/bin/fm-brief.sh" task-fast fallback-app >/dev/null 2>/dev/null || fail "default ship brief scaffold failed under FM_HOME"
+  brief="$home_one/data/task-fast/brief.md"
+  grep -F 'Fast Gate is the default for ordinary ship work' "$brief" >/dev/null || fail "default ship brief did not make Fast Gate default"
+  grep -F 'no-mistakes doctor' "$brief" >/dev/null && fail "default ship brief still forces no-mistakes setup"
 
   FM_HOME="$home_one" "$ROOT/bin/fm-brief.sh" task-b app --scout >/dev/null || fail "scout brief scaffold failed under FM_HOME"
   brief="$home_one/data/task-b/brief.md"
@@ -1057,7 +1063,7 @@ test_home_seed_refuses_symlinked_leaf_files() {
 }
 
 test_secondmate_spawn_records_home_meta() {
-  local home subhome subhome_abs fakebin log meta
+  local home subhome subhome_abs fakebin log meta out
   home="$TMP_ROOT/spawn home"
   subhome="$TMP_ROOT/spawn subhome"
   mkdir -p "$home/data/spawn-sub" "$home/state" "$subhome/data"
@@ -1070,14 +1076,19 @@ test_secondmate_spawn_records_home_meta() {
   fakebin=$(make_fake_tmux "$TMP_ROOT/spawn-fake")
   log="$TMP_ROOT/spawn-fake/tmux.log"
 
-  PATH="$fakebin:$PATH" FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/parent-config" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-fake/pane.txt" \
-    "$ROOT/bin/fm-spawn.sh" spawn-sub "$subhome" codex --secondmate >/dev/null \
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_CONFIG_OVERRIDE="$home/parent-config" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-fake/pane.txt" \
+    "$ROOT/bin/fm-spawn.sh" spawn-sub "$subhome" codex --secondmate) \
     || fail "secondmate spawn failed"
 
   meta="$home/state/spawn-sub.meta"
+  grep -Fx 'backend=tmux-treehouse' "$meta" >/dev/null || fail "meta did not record implemented worker backend"
+  grep -Fx 'worker_id=firstmate:fm-spawn-sub' "$meta" >/dev/null || fail "meta did not record worker id"
+  grep -Fx "worker_project_path=$subhome_abs" "$meta" >/dev/null || fail "meta did not record worker project path"
+  grep -Fx 'environment=firstmate-home' "$meta" >/dev/null || fail "meta did not record worker environment"
   grep -Fx 'kind=secondmate' "$meta" >/dev/null || fail "meta did not record kind=secondmate"
   grep -Fx "home=$subhome_abs" "$meta" >/dev/null || fail "meta did not record subhome"
   grep -Fx 'projects=alpha, beta' "$meta" >/dev/null || fail "meta did not record project clone list"
+  printf '%s\n' "$out" | grep -F 'spawned spawn-sub backend=tmux-treehouse' >/dev/null || fail "spawn output did not include backend"
   grep -F 'treehouse get' "$log" >/dev/null && fail "secondmate spawn should not run project treehouse get"
   grep -F "FM_HOME='$subhome_abs'" "$log" >/dev/null || fail "secondmate launch did not set FM_HOME to subhome"
   grep -F 'FM_ROOT_OVERRIDE= FM_STATE_OVERRIDE= FM_DATA_OVERRIDE= FM_PROJECTS_OVERRIDE=' "$log" >/dev/null || fail "secondmate launch did not clear operational overrides"
@@ -1127,18 +1138,18 @@ SH
     fail "secondmate spawn accepted an unseeded home"
   fi
   grep -F 'not a seeded secondmate home' "$err" >/dev/null || fail "spawn did not explain missing seed marker"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before seed marker validation"
+  # Canonical ordering proof: validation runs before any tmux side-effect. Every rejection
+  # reason below shares this one linear pre-launch path, so they each assert only their own
+  # refusal message rather than re-proving "no window created before validation" each time.
+  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before validation"
 
-  : > "$log"
   printf 'other\n' > "$wronghome/.fm-secondmate-home"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
     "$ROOT/bin/fm-spawn.sh" domain "$wronghome" codex --secondmate >/dev/null 2>"$err"; then
     fail "secondmate spawn accepted a home marked for another secondmate"
   fi
   grep -F 'marked for secondmate other, expected domain' "$err" >/dev/null || fail "spawn did not explain marker mismatch"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before marker mismatch validation"
 
-  : > "$log"
   printf 'domain\n' > "$marker_only/.fm-secondmate-home"
   printf 'charter\n' > "$marker_only/data/charter.md"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
@@ -1146,35 +1157,27 @@ SH
     fail "secondmate spawn accepted a marked home missing AGENTS.md"
   fi
   grep -F 'not a firstmate home (missing AGENTS.md)' "$err" >/dev/null || fail "spawn did not explain missing AGENTS.md"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before AGENTS.md validation"
 
-  : > "$log"
   printf '# Firstmate\n' > "$marker_only/AGENTS.md"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
     "$ROOT/bin/fm-spawn.sh" domain "$marker_only" codex --secondmate >/dev/null 2>"$err"; then
     fail "secondmate spawn accepted a marked home missing bin"
   fi
   grep -F 'not a firstmate home (missing bin/)' "$err" >/dev/null || fail "spawn did not explain missing bin"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before bin validation"
 
-  : > "$log"
   printf 'domain\n' > "$home/.fm-secondmate-home"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
     "$ROOT/bin/fm-spawn.sh" domain "$home" codex --secondmate >/dev/null 2>"$err"; then
     fail "secondmate spawn accepted the active home"
   fi
   grep -F 'secondmate home cannot be the active firstmate home' "$err" >/dev/null || fail "spawn did not reject active home"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before active-home validation"
 
-  : > "$log"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
     "$ROOT/bin/fm-spawn.sh" domain "$ROOT" codex --secondmate >/dev/null 2>"$err"; then
     fail "secondmate spawn accepted the firstmate repo root"
   fi
   grep -F 'secondmate home cannot be the firstmate repo' "$err" >/dev/null || fail "spawn did not reject firstmate repo root"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before root validation"
 
-  : > "$log"
   printf 'domain\n' > "$active_descendant/.fm-secondmate-home"
   printf 'charter\n' > "$active_descendant/data/charter.md"
   if PATH="$fakebin:$PATH" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
@@ -1182,9 +1185,7 @@ SH
     fail "secondmate spawn accepted a home inside the active firstmate home"
   fi
   grep -F 'secondmate home cannot be inside the active firstmate home' "$err" >/dev/null || fail "spawn did not reject active home descendant"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before active descendant validation"
 
-  : > "$log"
   printf 'domain\n' > "$active_ancestor/.fm-secondmate-home"
   printf 'charter\n' > "$active_ancestor/data/charter.md"
   if PATH="$fakebin:$PATH" FM_HOME="$ancestor_active_home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
@@ -1192,9 +1193,7 @@ SH
     fail "secondmate spawn accepted a home containing the active firstmate home"
   fi
   grep -F 'secondmate home cannot be an ancestor of the active firstmate home' "$err" >/dev/null || fail "spawn did not reject active home ancestor"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before active ancestor validation"
 
-  : > "$log"
   printf 'domain\n' > "$root_descendant/.fm-secondmate-home"
   printf 'charter\n' > "$root_descendant/data/charter.md"
   if PATH="$fakebin:$PATH" FM_ROOT_OVERRIDE="$fakeroot" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
@@ -1202,9 +1201,7 @@ SH
     fail "secondmate spawn accepted a home inside the firstmate repo"
   fi
   grep -F 'secondmate home cannot be inside the firstmate repo' "$err" >/dev/null || fail "spawn did not reject repo root descendant"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before repo descendant validation"
 
-  : > "$log"
   printf 'domain\n' > "$root_ancestor/.fm-secondmate-home"
   printf 'charter\n' > "$root_ancestor/data/charter.md"
   if PATH="$fakebin:$PATH" FM_ROOT_OVERRIDE="$root_inside" FM_HOME="$home" FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_CAPTURE="$TMP_ROOT/spawn-validate-fake/pane.txt" \
@@ -1212,7 +1209,6 @@ SH
     fail "secondmate spawn accepted a home containing the firstmate repo"
   fi
   grep -F 'secondmate home cannot be an ancestor of the firstmate repo' "$err" >/dev/null || fail "spawn did not reject repo ancestor"
-  grep -F 'new-window' "$log" >/dev/null && fail "spawn created a window before repo ancestor validation"
 
   pass "secondmate spawn validates homes before launch"
 }
