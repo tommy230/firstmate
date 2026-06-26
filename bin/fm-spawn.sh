@@ -145,19 +145,20 @@ current_worker_backend() {
   printf '%s\n' "${FM_WORKER_BACKEND:-tmux-treehouse}"
 }
 
-require_supported_worker_backend() {
+require_known_worker_backend() {
   local backend=$1
   case "$backend" in
-    tmux-treehouse) ;;
-    codex-desktop)
-      echo "error: worker backend codex-desktop is not implemented; no callable Codex Desktop project/thread API exists yet" >&2
-      return 1
-      ;;
+    tmux-treehouse|codex-desktop) ;;
     *)
       echo "error: unsupported worker backend '$backend'" >&2
       return 1
       ;;
   esac
+}
+
+codex_desktop_backend_unavailable() {
+  echo "error: worker backend codex-desktop is not implemented; no callable Codex Desktop project/thread API exists yet" >&2
+  return 1
 }
 
 worker_environment() {
@@ -199,6 +200,51 @@ write_spawn_meta() {
   } > "$STATE/$ID.meta"
 }
 
+start_tmux_treehouse_worker() {
+  local p
+  # Same session when firstmate already runs inside tmux; dedicated session otherwise.
+  if [ -n "${TMUX:-}" ]; then
+    SES=$(tmux display-message -p '#S')
+  else
+    tmux has-session -t firstmate 2>/dev/null || tmux new-session -d -s firstmate
+    SES=firstmate
+  fi
+
+  W="fm-$ID"
+  T="$SES:$W"
+  if tmux list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
+    echo "error: window $T already exists" >&2
+    return 1
+  fi
+
+  tmux new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
+  if [ "$KIND" != secondmate ]; then
+    tmux send-keys -t "$T" 'treehouse get' Enter
+
+    # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
+    for _ in $(seq 1 60); do
+      p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
+      if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
+        WT="$p"
+        break
+      fi
+      sleep 1
+    done
+    if [ -z "$WT" ]; then
+      echo "error: treehouse get did not enter a worktree within 60s; inspect window $T" >&2
+      return 1
+    fi
+  fi
+}
+
+start_worker_backend() {
+  case "$BACKEND" in
+    tmux-treehouse) start_tmux_treehouse_worker ;;
+    codex-desktop) codex_desktop_backend_unavailable ;;
+    *) echo "error: unsupported worker backend '$BACKEND'" >&2; return 1 ;;
+  esac
+}
+
 case "$ARG3" in
   *' '*)  # raw launch command (unverified-adapter escape hatch)
     LAUNCH=$ARG3
@@ -218,7 +264,7 @@ case "$ARG3" in
 esac
 
 BACKEND=$(current_worker_backend)
-require_supported_worker_backend "$BACKEND" || exit 1
+require_known_worker_backend "$BACKEND" || exit 1
 
 secondmate_registry_value() {
   local id=$1 key=$2 reg line value
@@ -376,39 +422,7 @@ else
 fi
 [ -f "$BRIEF" ] || { echo "error: no brief at $BRIEF" >&2; exit 1; }
 
-# Same session when firstmate already runs inside tmux; dedicated session otherwise.
-if [ -n "${TMUX:-}" ]; then
-  SES=$(tmux display-message -p '#S')
-else
-  tmux has-session -t firstmate 2>/dev/null || tmux new-session -d -s firstmate
-  SES=firstmate
-fi
-
-W="fm-$ID"
-T="$SES:$W"
-if tmux list-windows -t "$SES" -F '#{window_name}' | grep -qx "$W"; then
-  echo "error: window $T already exists" >&2
-  exit 1
-fi
-
-tmux new-window -d -t "$SES" -n "$W" -c "$PROJ_ABS"
-if [ "$KIND" != secondmate ]; then
-  tmux send-keys -t "$T" 'treehouse get' Enter
-
-  # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
-  for _ in $(seq 1 60); do
-    p=$(tmux display-message -p -t "$T" '#{pane_current_path}' 2>/dev/null || true)
-    if [ -n "$p" ] && [ "$p" != "$PROJ_ABS" ]; then
-      WT="$p"
-      break
-    fi
-    sleep 1
-  done
-  if [ -z "$WT" ]; then
-    echo "error: treehouse get did not enter a worktree within 60s; inspect window $T" >&2
-    exit 1
-  fi
-fi
+start_worker_backend || exit 1
 
 # Per-harness turn-end hook: a file that touches state/<id>.turn-ended when the
 # agent finishes a turn. Worktree-resident hooks are kept out of git's view so
@@ -421,7 +435,11 @@ exclude_path() {
   mkdir -p "$(dirname "$EXCL")"
   grep -qxF "$rel" "$EXCL" 2>/dev/null || echo "$rel" >> "$EXCL"
 }
-if [ "$KIND" != secondmate ]; then
+install_tmux_treehouse_turn_end_hook() {
+  if [ "$KIND" = secondmate ]; then
+    return 0
+  fi
+
   case "$HARNESS" in
     claude*)
       mkdir -p "$WT/.claude"
@@ -460,7 +478,16 @@ EOF
       # codex: turn-end rides the launch command via -c notify=[...] and __TURNEND__.
       ;;
   esac
-fi
+}
+
+install_worker_turn_end_hook() {
+  case "$BACKEND" in
+    tmux-treehouse) install_tmux_treehouse_turn_end_hook ;;
+    codex-desktop) codex_desktop_backend_unavailable ;;
+    *) echo "error: unsupported worker backend '$BACKEND'" >&2; return 1 ;;
+  esac
+}
+install_worker_turn_end_hook || exit 1
 
 # Per-project delivery mode + yolo flag (bin/fm-project-mode.sh; AGENTS.md sections 6-7).
 # Recorded in meta so fm-teardown's safety check and the validate/merge stages can

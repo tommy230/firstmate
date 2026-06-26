@@ -166,6 +166,29 @@ test_codex_desktop_backend_fails_closed_until_real_api_exists() {
   pass "codex-desktop backend fails closed before tmux side effects"
 }
 
+test_unknown_backend_fails_closed_before_side_effects() {
+  local home project fakebin log out status
+  home="$TMP_ROOT/unknown-home"
+  project="delta"
+  make_home_with_project "$home" "$project"
+  mkdir -p "$home/data/backend-unknown"
+  printf 'brief\n' > "$home/data/backend-unknown/brief.md"
+  fakebin=$(make_fake_tmux "$TMP_ROOT/unknown-fake")
+  log="$TMP_ROOT/unknown-fake/tmux.log"
+
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SPAWN_NO_GUARD=1 \
+    FM_WORKER_BACKEND=bogus FM_FAKE_TMUX_LOG="$log" FM_FAKE_TMUX_PANE_PATH="$home/projects/$project" \
+    "$SPAWN" backend-unknown "projects/$project" codex 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "unknown backend should fail"
+  printf '%s\n' "$out" | grep -F "unsupported worker backend 'bogus'" >/dev/null \
+    || fail "unknown backend refusal did not name backend"
+  [ ! -s "$log" ] || fail "unknown backend reached tmux side effects"
+  [ ! -e "$home/state/backend-unknown.meta" ] || fail "unknown backend wrote metadata"
+  pass "unknown backend fails closed before tmux side effects"
+}
+
 test_ship_spawn_records_backend_metadata
 test_scout_spawn_uses_same_backend_boundary
 test_codex_desktop_backend_fails_closed_until_real_api_exists
+test_unknown_backend_fails_closed_before_side_effects
